@@ -13,10 +13,12 @@
     "windows": [
       {
         "title": "windog-ai",
-        "width": 800,
-        "height": 600,
+        "width": 960,
+        "height": 540,
         "minWidth": 480,
         "minHeight": 360,
+        "resizable": false,
+        "maximizable": false,
         "center": true
       }
     ],

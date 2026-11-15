@@ -1,0 +1,24 @@
+[[permission]]
+identifier = "allow-resource-history"
+description = "Allow reading the resource sample history."
+commands.allow = ["resource_history"]
+
+[[permission]]
+identifier = "allow-get-processes"
+description = "Allow reading the current process list."
+commands.allow = ["get_processes"]
+
+[[permission]]
+identifier = "allow-set-resource-streaming"
+description = "Allow pausing and resuming the resource sampler."
+commands.allow = ["set_resource_streaming"]
+
+[[permission]]
+identifier = "allow-thermal-history"
+description = "Allow reading the thermal sample history."
+commands.allow = ["thermal_history"]
+
+[[permission]]
+identifier = "allow-recheck-thermals"
+description = "Allow re-detecting thermal sensors."
+commands.allow = ["recheck_thermals"]
