@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { useSamplerStreaming } from "./hooks/useSamplerStreaming";
+import { Power } from "./screens/Power";
 import { Processes } from "./screens/Processes";
 import { ResourceGraph } from "./screens/ResourceGraph";
 import { Thermals } from "./screens/Thermals";
@@ -19,8 +20,8 @@ function PendingScreen({ label }: { label: string }) {
 
       <section className="bg-surface p-5">
         <p className="max-w-lg text-xs leading-5 text-muted-foreground">
-          This screen is not built yet. Resource Graph, Thermals, and Processes have live data in
-          this pass.
+          This screen is not built yet. Resource Graph, Thermals, Power, and Processes have live
+          data in this pass.
         </p>
       </section>
     </div>
@@ -59,6 +60,8 @@ function App() {
           <ResourceGraph onOpenThermals={() => setActiveLabel("Thermals")} />
         ) : activeLabel === "Thermals" ? (
           <Thermals />
+        ) : activeLabel === "Power" ? (
+          <Power />
         ) : activeLabel === "Processes" ? (
           <Processes />
         ) : (

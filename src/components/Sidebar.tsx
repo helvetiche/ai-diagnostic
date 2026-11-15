@@ -2,6 +2,7 @@ import {
   BugIcon,
   GaugeIcon,
   GraphIcon,
+  PowerIcon,
   PrinterIcon,
   RowsIcon,
   ThermometerSimpleIcon,
@@ -24,6 +25,11 @@ const NAV_ITEMS: NavItem[] = [
     label: "Thermals",
     description: "CPU and GPU temps.",
     icon: ThermometerSimpleIcon,
+  },
+  {
+    label: "Power",
+    description: "Uptime and stop history.",
+    icon: PowerIcon,
   },
   {
     label: "Processes",

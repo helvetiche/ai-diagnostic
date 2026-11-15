@@ -1,5 +1,22 @@
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
 
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+export function formatDateTime(epochMs: number | null): string {
+  if (epochMs === null || !Number.isFinite(epochMs)) {
+    return "Not recorded";
+  }
+
+  return DATE_TIME_FORMAT.format(new Date(epochMs));
+}
+
 export function formatBytes(value: number, digits = 1): string {
   if (!Number.isFinite(value) || value <= 0) {
     return "0 B";

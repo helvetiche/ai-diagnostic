@@ -111,6 +111,43 @@ Live CPU and GPU temperatures, built as a real-data screen.
   in the app. The Windows installer may offer the official driver as an explicit
   optional prerequisite.
 
+### 8. Power monitor
+
+Uptime, shutdowns, restarts, and unexpected stops, built as a real-data screen
+with four internal tabs.
+
+- Dedicated Power destination. Separate tabs keep planned stops apart from
+  faults: Uptime, Shutdowns, Restarts, Power offs.
+- Read the live Windows System log on demand through the native Event Log API.
+  Query event IDs 13, 41, 1001, 1074, 6006, and 6008. No local history is stored
+  in this pass.
+- Planned shutdown and restart come from event 1074 (`param5` is `power off` or
+  `restart`). Merge requests of the same type within 10 seconds, then match each
+  clean stop to the latest request before it within 60 minutes.
+- A request without a clean stop stays visible as unconfirmed. A clean stop with
+  no request is listed separately and never labeled as a shutdown or restart
+  when the log does not say which one it was.
+- Unexpected stop comes from Kernel-Power 41 plus Event Log 6008. Pair them at
+  the next boot. The 6008 binary field carries the previous stop as a local
+  SYSTEMTIME; show it as approximate. If it is missing, show the 41 event time as
+  a next-boot time, not as the stop time.
+- A non-zero `BugcheckCode` on event 41, or a stop-code report from event 1001,
+  classifies the record as a Windows stop error. Power-button and sleep fields
+  from event 41 are shown as facts, never turned into a cause.
+- Uptime uses the wall clock since boot, which includes sleep. Active time uses
+  `QueryUnbiasedInterruptTime` and excludes sleep. Show both, plus the
+  difference as sleep time.
+- Show Fast Startup state and its caveat. A hybrid shutdown can make uptime look
+  longer than the time since physical power-on, so stop events are the source for
+  power-off timing. A hybrid shutdown also hibernates the kernel session instead
+  of stopping services, so it can skip the event 13 and 6006 clean-stop records.
+  Never treat a shutdown request without a clean stop as a fault on its own.
+- Show System log coverage: retained record count, file size, oldest record time,
+  and a warning when earlier records are missing. Mark the 500-event query cap.
+  Never imply the retained log is complete when it is not.
+- Every record lists its Windows evidence: provider, event ID, record ID, and
+  event time. Missing or approximate times are labeled in place.
+
 ## PawnIO installation and packaging
 
 Current state: Windog bundles the signed LGPL sensor modules, but not the PawnIO

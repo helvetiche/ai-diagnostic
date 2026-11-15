@@ -1,4 +1,5 @@
 mod network;
+mod power;
 mod resources;
 mod thermal;
 
@@ -21,6 +22,7 @@ pub fn run() {
             resources::resource_history,
             resources::get_processes,
             resources::set_resource_streaming,
+            power::power_history,
             thermal::thermal_history,
             thermal::recheck_thermals,
         ])
