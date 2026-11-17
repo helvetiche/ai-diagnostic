@@ -4,7 +4,7 @@ type SparklineProps = {
   values: number[];
   color?: string;
   width?: number;
-  height?: number | string;
+  height?: number;
   min?: number;
   max?: number;
   className?: string;
@@ -15,8 +15,8 @@ const COORD_HEIGHT = 100;
 export function Sparkline({
   values,
   color = "var(--primary)",
-  width = 72,
-  height = 32,
+  width = 56,
+  height = 18,
   min,
   max,
   className,
@@ -25,8 +25,8 @@ export function Sparkline({
     return (
       <span
         aria-hidden="true"
-        className={cn("inline-block border border-border", className)}
-        style={{ width, height, display: "inline-block" }}
+        className={cn("inline-block border-b border-border-subtle", className)}
+        style={{ width, height }}
       />
     );
   }
@@ -44,12 +44,9 @@ export function Sparkline({
     .join(" ");
 
   return (
-    <span
-      className={cn("inline-block border border-border", className)}
-      style={{ width, height, display: "inline-block" }}
-    >
+    <span aria-hidden="true" className={cn("inline-block", className)} style={{ width, height }}>
       <svg
-        width="100%"
+        width={width}
         height={height}
         viewBox={`0 0 ${width} ${COORD_HEIGHT}`}
         preserveAspectRatio="none"
@@ -60,14 +57,10 @@ export function Sparkline({
           points={points}
           fill="none"
           stroke={color}
-          strokeWidth="1.5"
+          strokeWidth="1.25"
           strokeLinejoin="round"
           strokeLinecap="round"
-          style={{
-            strokeDasharray: 1000,
-            strokeDashoffset: 1000,
-            animation: "draw-line 0.8s ease-out forwards",
-          }}
+          vectorEffect="non-scaling-stroke"
         />
       </svg>
     </span>

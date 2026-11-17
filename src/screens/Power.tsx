@@ -1,128 +1,66 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
-import { ArrowClockwiseIcon } from "@phosphor-icons/react";
-
+import { ArrowClockwiseIcon, CheckCircleIcon, ClockIcon, MoonIcon, PulseIcon, WarningIcon, XCircleIcon } from "@phosphor-icons/react";
+import { Fragment, useMemo, useState, type KeyboardEvent } from "react";
+import { Screen } from "@/components/layout/Screen";
+import { Meter } from "@/components/primitives/Meter";
+import { Panel } from "@/components/primitives/Panel";
+import { Reading } from "@/components/primitives/Reading";
+import { StateView } from "@/components/primitives/StateView";
+import { StatusMark, type MarkTone } from "@/components/primitives/StatusMark";
 import { usePowerHistory, type PowerHistoryStatus } from "@/hooks/usePowerHistory";
 import { formatBytes, formatDateTime, formatUptime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PowerLogInfo, PowerRecord, PowerSnapshot } from "@/types/power";
 
-const TAB_KEYS = ["uptime", "shutdowns", "restarts", "power-offs"] as const;
+const TAB_KEYS = ["shutdowns", "restarts", "power-offs"] as const;
 
 type TabKey = (typeof TAB_KEYS)[number];
 
 const TAB_LABELS: Record<TabKey, string> = {
-  uptime: "Uptime",
   shutdowns: "Shutdowns",
   restarts: "Restarts",
   "power-offs": "Power offs",
 };
 
-function Timestamp({
-  value,
-  className,
-}: {
-  value: number | null;
-  className?: string;
-}) {
+const TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function formatTime(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return TIME_FORMAT.format(new Date(value));
+}
+
+function Timestamp({ value, className }: { value: number | null; className?: string }) {
   return (
-    <time
-      dateTime={value === null ? undefined : new Date(value).toISOString()}
-      className={className}
-    >
+    <time dateTime={value === null ? undefined : new Date(value).toISOString()} className={className}>
       {formatDateTime(value)}
     </time>
   );
 }
 
-function StatusLine({
+function HistoryStatus({
   status,
   capturedAt,
 }: {
   status: PowerHistoryStatus;
   capturedAt?: number;
 }) {
-  const label =
-    status === "loading"
-      ? capturedAt === undefined
-        ? "Reading the System log"
-        : "Refreshing the System log"
-      : status === "ready"
-        ? `Read from the live System log · ${formatDateTime(capturedAt ?? null)}`
-        : "Power history unavailable";
+  if (status === "error") {
+    return <StatusMark tone="critical">Unavailable</StatusMark>;
+  }
 
-  return (
-    <p
-      role="status"
-      className="mt-2 flex items-center gap-2 text-[11px] leading-4 font-medium text-muted-foreground"
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "size-1.5 shrink-0",
-          status === "ready"
-            ? "bg-success"
-            : status === "error"
-              ? "bg-critical"
-              : "bg-muted-foreground",
-        )}
-      />
-      {label}
-    </p>
-  );
-}
+  if (status === "loading") {
+    return (
+      <StatusMark tone="muted">{capturedAt === undefined ? "Reading the log" : "Refreshing"}</StatusMark>
+    );
+  }
 
-function PageHeader({
-  status,
-  capturedAt,
-  refreshing,
-  onRefresh,
-}: {
-  status: PowerHistoryStatus;
-  capturedAt?: number;
-  refreshing: boolean;
-  onRefresh: () => void;
-}) {
-  return (
-    <header>
-      <p className="text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-        Workspace
-      </p>
-      <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl leading-8 font-semibold tracking-[-0.02em] text-foreground">
-            Power
-          </h1>
-          <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">
-            Uptime, shutdowns, restarts, and unexpected stops from the Windows
-            System log.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="flex min-h-10 items-center gap-2 bg-surface px-3 text-xs font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-accent disabled:opacity-60"
-        >
-          <ArrowClockwiseIcon size={16} aria-hidden="true" />
-          {refreshing ? "Reading" : "Refresh"}
-        </button>
-      </div>
-      <StatusLine status={status} capturedAt={capturedAt} />
-    </header>
-  );
-}
-
-function PanelIntro({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div>
-      <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-        {title}
-      </h2>
-      <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">
-        {detail}
-      </p>
-    </div>
-  );
+  return <StatusMark tone="success">Read at {formatTime(capturedAt ?? null)}</StatusMark>;
 }
 
 function ErrorBanner({
@@ -135,107 +73,24 @@ function ErrorBanner({
   onRetry?: () => void;
 }) {
   return (
-    <section className="bg-critical-soft p-4">
-      <h2 className="text-sm leading-5 font-semibold text-critical">{title}</h2>
-      <p className="mt-1 max-w-lg text-xs leading-5 text-critical">{detail}</p>
+    <Panel className="bg-critical-soft p-4">
+      <h2 className="text-[13px] font-medium text-critical">{title}</h2>
+      <p className="mt-1 max-w-2xl text-[11px] leading-4 text-critical">{detail}</p>
       {onRetry ? (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-3 min-h-10 bg-surface px-3 text-xs font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-accent"
-        >
+        <Button variant="quiet" className="mt-3" onClick={onRetry}>
           Try again
-        </button>
+        </Button>
       ) : null}
-    </section>
+    </Panel>
   );
 }
 
-function Metric({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note: string;
-}) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-surface-muted p-3">
-      <dt className="text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-        {label}
-      </dt>
-      <dd className="mt-0.5 font-mono text-xs leading-5 break-words text-foreground">
-        {value}
-      </dd>
-      <dd className="mt-1 text-[11px] leading-4 text-muted-foreground">
-        {note}
-      </dd>
+    <div className="min-w-0">
+      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 font-mono text-[12px] tabular-nums text-foreground">{value}</dd>
     </div>
-  );
-}
-
-function FastStartupCard({ enabled }: { enabled: boolean | null }) {
-  return (
-    <section className="bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Fast Startup
-          </h2>
-          <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">
-            A hybrid shutdown saves the kernel session to disk. That can make
-            uptime look longer than the time since the PC was powered on.
-          </p>
-        </div>
-        <span className="bg-surface-muted px-2 py-1 text-[11px] leading-4 font-medium text-foreground">
-          {enabled === null ? "Unknown" : enabled ? "On" : "Off"}
-        </span>
-      </div>
-      <p className="mt-3 max-w-xl text-xs leading-5 text-muted-foreground">
-        {enabled === null
-          ? "Windog could not read the Fast Startup setting. Uptime may not match the time since the PC was physically powered on."
-          : enabled
-            ? "Fast Startup is on. Uptime can include time from before the last physical power-on."
-            : "Fast Startup is off. Each boot starts a new kernel session, so uptime starts at the last full boot."}
-      </p>
-    </section>
-  );
-}
-
-function LastStopCard({ record }: { record: PowerRecord | null }) {
-  return (
-    <section className="bg-surface p-5">
-      <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-        Last recorded stop
-      </h2>
-      <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">
-        The newest stop in the retained System log. Unconfirmed requests are
-        excluded.
-      </p>
-      {record ? (
-        <div className="mt-4 bg-surface-muted p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <p className="text-sm leading-5 font-medium text-foreground">
-              {record.headline}
-            </p>
-            <Timestamp
-              value={record.time}
-              className="font-mono text-[11px] leading-4 tabular-nums text-foreground"
-            />
-          </div>
-          {record.timeNote ? (
-            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              {record.timeNote}
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <p className="mt-3 max-w-lg text-xs leading-5 text-muted-foreground">
-          No stop events are stored in the retained System log.
-        </p>
-      )}
-    </section>
   );
 }
 
@@ -246,57 +101,51 @@ function UptimePanel({
   snapshot: PowerSnapshot;
   lastStop: PowerRecord | null;
 }) {
-  const uptimeValue =
-    snapshot.uptimeSeconds === null
-      ? "Unavailable"
-      : formatUptime(snapshot.uptimeSeconds);
-
   return (
-    <>
-      <section className="bg-surface p-5">
-        <p className="text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-          Current session
-        </p>
-        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
-          <p className="font-mono text-4xl leading-none tracking-[-0.04em] tabular-nums text-foreground">
-            {uptimeValue}
-          </p>
-          <p className="max-w-xs text-[11px] leading-4 text-muted-foreground">
-            {snapshot.uptimeSeconds === null
-              ? "The uptime counter could not be read."
-              : "Wall time since the last boot, including sleep."}
+    <section className="border border-border p-5">
+      <Reading
+        label="Uptime"
+        value={snapshot.uptimeSeconds === null ? "—" : formatUptime(snapshot.uptimeSeconds)}
+        size="hero"
+      />
+
+      <dl className="mt-5 grid gap-4 border-t border-border-subtle pt-4 sm:grid-cols-3">
+        <Metric
+          label="Active time"
+          value={snapshot.activeSeconds === null ? "—" : formatUptime(snapshot.activeSeconds)}
+        />
+        <Metric
+          label="Sleep time"
+          value={snapshot.sleepSeconds === null ? "—" : formatUptime(snapshot.sleepSeconds)}
+        />
+        <Metric label="Boot time" value={formatDateTime(snapshot.bootTime)} />
+      </dl>
+
+      <div className="mt-5 grid gap-4 border-t border-border-subtle pt-4 sm:grid-cols-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground">Last recorded stop</p>
+          {lastStop ? (
+            <>
+              <p className="mt-1 text-[12px] font-medium text-foreground">{lastStop.headline}</p>
+              <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+                {formatDateTime(lastStop.time)}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+              No stop events in the retained log.
+            </p>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground">Fast Startup</p>
+          <p className="mt-1 text-[12px] font-medium text-foreground">
+            {snapshot.fastStartup === null ? "Unknown" : snapshot.fastStartup ? "On" : "Off"}
           </p>
         </div>
-        <dl className="mt-5 grid gap-2 sm:grid-cols-3">
-          <Metric
-            label="Active time"
-            value={
-              snapshot.activeSeconds === null
-                ? "Unavailable"
-                : formatUptime(snapshot.activeSeconds)
-            }
-            note="Working state only. Excludes sleep and hibernation."
-          />
-          <Metric
-            label="Sleep time"
-            value={
-              snapshot.sleepSeconds === null
-                ? "Unavailable"
-                : formatUptime(snapshot.sleepSeconds)
-            }
-            note="Wall uptime minus active time."
-          />
-          <Metric
-            label="Boot time"
-            value={formatDateTime(snapshot.bootTime)}
-            note="Approximate. Derived from the uptime counter."
-          />
-        </dl>
-      </section>
-
-      <LastStopCard record={lastStop} />
-      <FastStartupCard enabled={snapshot.fastStartup} />
-    </>
+      </div>
+    </section>
   );
 }
 
@@ -309,59 +158,39 @@ function CoverageNotice({
 }) {
   if (!log) {
     return (
-      <p className="bg-surface px-4 py-3 text-[11px] leading-4 text-muted-foreground">
-        Log retention details could not be read. Matching events still come
-        from the live System log.
-      </p>
+      <p className="px-1 text-[11px] leading-4 text-muted-foreground">Log details unavailable.</p>
     );
   }
 
   const missingEarlierRecords = log.oldestRecord > 1;
 
   return (
-    <section className="bg-surface px-4 py-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-          System log coverage
-        </p>
-        <p className="font-mono text-[10px] leading-4 text-muted-foreground">
-          {log.recordCount.toLocaleString("en-US")} records ·{" "}
+    <div className="px-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+        <span>
+          System log · {log.recordCount.toLocaleString("en-US")} records ·{" "}
           {formatBytes(log.fileBytes)}
-        </p>
+        </span>
+        <span>
+          Oldest <Timestamp value={log.oldestTime} className="font-mono text-foreground" />
+        </span>
       </div>
-      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-        Oldest record still stored:{" "}
-        <Timestamp
-          value={log.oldestTime}
-          className="font-mono text-foreground"
-        />
-      </p>
       {missingEarlierRecords ? (
-        <p className="mt-2 bg-warning-soft px-3 py-2 text-[11px] leading-4 text-warning">
-          {log.full
-            ? "The System log is full, so Windows overwrites the oldest records. Stops before the oldest record are gone."
-            : "Earlier records are missing from this log. It may have been cleared. Stops before the oldest record are gone."}
+        <p className="mt-1.5 text-[11px] leading-4 text-warning">
+          {log.full ? "The log is full. Oldest records are overwritten." : "Earlier records are missing."}
         </p>
       ) : null}
       {truncated ? (
-        <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-          Showing the newest 500 matching events. Older matching events are not
-          listed.
-        </p>
+        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Newest 500 events shown.</p>
       ) : null}
-    </section>
+    </div>
   );
 }
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
+function EmptyState({ title }: { title: string }) {
   return (
-    <section className="bg-surface p-5">
-      <h3 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-        {title}
-      </h3>
-      <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-        {detail}
-      </p>
+    <section className="border border-border p-5">
+      <h3 className="text-[13px] font-medium text-foreground">{title}</h3>
     </section>
   );
 }
@@ -386,60 +215,81 @@ function kindLabel(record: PowerRecord): string {
   return "Unexpected stop";
 }
 
-function severityColor(severity: PowerRecord["severity"]): string {
+function severityTone(severity: PowerRecord["severity"]): MarkTone {
   if (severity === "critical") {
-    return "text-critical";
+    return "critical";
   }
 
   if (severity === "warning") {
-    return "text-warning";
+    return "warning";
   }
 
-  return "text-muted-foreground";
+  return "success";
 }
 
-function RecordCard({ record }: { record: PowerRecord }) {
-  return (
-    <article className="bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0">
-          <p
-            className={cn(
-              "text-[11px] leading-4 font-medium tracking-[0.06em] uppercase",
-              severityColor(record.severity),
-            )}
-          >
-            {kindLabel(record)}
-          </p>
-          <h3 className="mt-1 text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            {record.headline}
-          </h3>
-        </div>
-        <div className="text-left sm:text-right">
-          <Timestamp
-            value={record.time}
-            className="font-mono text-xs leading-5 tabular-nums text-foreground"
-          />
-          {record.timeNote ? (
-            <p className="mt-0.5 max-w-[20rem] text-[11px] leading-4 text-muted-foreground">
-              {record.timeNote}
-            </p>
-          ) : null}
-        </div>
-      </div>
+function severityLabel(severity: PowerRecord["severity"]): string {
+  if (severity === "critical") {
+    return "Critical";
+  }
 
-      <p className="mt-3 max-w-lg text-xs leading-5 text-muted-foreground">
-        {record.detail}
-      </p>
+  if (severity === "warning") {
+    return "Moderate";
+  }
+
+  return "Safe";
+}
+
+function timeQualifier(record: PowerRecord): string | null {
+  const note = record.timeNote;
+
+  if (!note) {
+    return null;
+  }
+
+  if (note.startsWith("Approximate.")) {
+    return "Approximate";
+  }
+
+  if (note.startsWith("Request time.")) {
+    return "Request time";
+  }
+
+  if (note.startsWith("Clean stop recorded. The stop time was not recorded.")) {
+    return "Request time";
+  }
+
+  if (note.startsWith("Logged at the next boot") || note.startsWith("Logged after the next boot")) {
+    return "Next boot";
+  }
+
+  if (note.includes("time was not recorded")) {
+    return "Time missing";
+  }
+
+  if (note.startsWith("Clean stop")) {
+    return "Clean stop";
+  }
+
+  return null;
+}
+
+function RecordDetail({ record }: { record: PowerRecord }) {
+  return (
+    <div className="flex max-w-2xl flex-col gap-4">
+      {record.timeNote ? (
+        <p className="text-[11px] leading-4 text-muted-foreground">
+          <span className="font-medium text-foreground">Time:</span> {record.timeNote}
+        </p>
+      ) : null}
+
+      <p className="text-[11px] leading-4 text-muted-foreground">{record.detail}</p>
 
       {record.facts.length > 0 ? (
-        <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {record.facts.map((fact, index) => (
             <div key={`${fact.label}-${index}`} className="min-w-0">
-              <dt className="text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                {fact.label}
-              </dt>
-              <dd className="mt-0.5 font-mono text-[11px] leading-4 break-words text-foreground">
+              <dt className="text-[10px] font-medium text-muted-foreground">{fact.label}</dt>
+              <dd className="mt-0.5 font-mono text-[11px] break-words text-foreground">
                 {fact.value}
               </dd>
             </div>
@@ -448,106 +298,137 @@ function RecordCard({ record }: { record: PowerRecord }) {
       ) : null}
 
       {record.events.length > 0 ? (
-        <div className="mt-4">
-          <p className="text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-            Evidence
-          </p>
-          <ul className="mt-2 flex flex-col gap-1">
+        <div>
+          <p className="text-[10px] font-medium text-muted-foreground">Evidence</p>
+          <ul className="mt-1.5 flex flex-col">
             {record.events.map((event, index) => (
               <li
                 key={`${event.recordId}-${index}`}
-                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 bg-surface-muted px-3 py-2"
+                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border-subtle py-1.5 text-[11px] last:border-b-0"
               >
-                <span className="text-[11px] leading-4 text-muted-foreground">
-                  {event.role}
-                </span>
-                <span className="font-mono text-[10px] leading-4 text-foreground">
-                  {event.provider} · Event {event.eventId} · Record{" "}
-                  {event.recordId}
+                <span className="text-muted-foreground">{event.role}</span>
+                <span className="font-mono text-foreground">
+                  {event.provider} · Event {event.eventId} · Record {event.recordId}
                 </span>
                 <Timestamp
                   value={event.time}
-                  className="font-mono text-[10px] leading-4 tabular-nums text-muted-foreground"
+                  className="font-mono tabular-nums text-muted-foreground"
                 />
               </li>
             ))}
           </ul>
         </div>
       ) : null}
-    </article>
-  );
-}
-
-function RecordList({
-  records,
-  emptyTitle,
-  emptyDetail,
-}: {
-  records: PowerRecord[];
-  emptyTitle: string;
-  emptyDetail: string;
-}) {
-  if (records.length === 0) {
-    return <EmptyState title={emptyTitle} detail={emptyDetail} />;
-  }
-
-  return (
-    <ul className="flex flex-col gap-3">
-      {records.map((record) => (
-        <li key={record.id}>
-          <RecordCard record={record} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function GuideItem({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="bg-surface-muted p-3">
-      <p className="text-xs leading-5 font-medium text-foreground">{title}</p>
-      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-        {detail}
-      </p>
     </div>
   );
 }
 
-function PowerGuide() {
+function RecordTable({
+  label,
+  records,
+  emptyTitle,
+}: {
+  label: string;
+  records: PowerRecord[];
+  emptyTitle: string;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (records.length === 0) {
+    return <EmptyState title={emptyTitle} />;
+  }
+
   return (
-    <section className="bg-surface p-5">
-      <h3 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-        Reading a power-off record
-      </h3>
-      <p className="mt-1 max-w-lg text-xs leading-5 text-muted-foreground">
-        These events describe what Windows recorded, not the cause. Check the
-        facts on each record.
-      </p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <GuideItem
-          title="Stop code recorded"
-          detail="Windows crashed. A driver, hardware, or power fault can cause it. The stop code narrows the search."
-        />
-        <GuideItem
-          title="Long power button press"
-          detail="Someone held the power button. That is physical input, not a software shutdown."
-        />
-        <GuideItem
-          title="No code, no button"
-          detail="Power loss, a hard reset, or a protective shutdown fits. Check the power cable, PSU, and cooling."
-        />
-      </div>
-      <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
-        Event Log 6008 estimates the previous stop from the last timestamp
-        Windows wrote. Treat that time as approximate.
-      </p>
+    <section className="overflow-x-auto border border-border">
+      <table className="w-full min-w-[40rem] table-fixed border-collapse text-left">
+        <caption className="sr-only">{label}</caption>
+        <thead>
+          <tr className="text-[10px] font-medium text-muted-foreground">
+            <th scope="col" className="w-[12.5rem] px-4 py-2 font-medium">
+              When
+            </th>
+            <th scope="col" className="w-[10rem] px-3 py-2 font-medium">
+              Type
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              Event
+            </th>
+            <th scope="col" className="w-20 px-3 py-2 text-right font-medium">
+              <span className="sr-only">Details</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((record) => {
+            const expanded = expandedId === record.id;
+            const qualifier = timeQualifier(record);
+            const detailId = `power-record-detail-${record.id}`;
+
+            return (
+              <Fragment key={record.id}>
+                <tr className="border-t border-border-subtle align-middle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted">
+                  <td className="px-4 py-2">
+                    <Timestamp
+                      value={record.time}
+                      className="block font-mono text-[11px] tabular-nums text-foreground"
+                    />
+                    {qualifier ? (
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        {qualifier}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="block text-[11px] font-medium text-foreground">
+                      {kindLabel(record)}
+                    </span>
+                    <StatusMark
+                      tone={severityTone(record.severity)}
+                      labelTone={record.severity !== "info"}
+                      className="mt-0.5"
+                    >
+                      {severityLabel(record.severity)}
+                    </StatusMark>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="text-[11px] leading-4 font-medium text-foreground">
+                      {record.headline}
+                    </span>
+                  </td>
+                  <td className="px-2 py-0 text-right">
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={detailId}
+                      aria-label={`${expanded ? "Hide" : "View"} details for ${record.headline}`}
+                      onClick={() => setExpandedId(expanded ? null : record.id)}
+                      className="inline-flex min-h-10 items-center px-2 text-[11px] font-medium text-muted-foreground transition-colors duration-[120ms] ease-soft hover:text-foreground"
+                    >
+                      {expanded ? "Hide" : "View"}
+                    </button>
+                  </td>
+                </tr>
+                <tr
+                  id={detailId}
+                  hidden={!expanded}
+                  className="border-t border-border-subtle bg-surface-muted"
+                >
+                  <td colSpan={4} className="px-4 py-4">
+                    {expanded ? <RecordDetail record={record} /> : null}
+                  </td>
+                </tr>
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }
 
 export function Power() {
   const { snapshot, status, error, refresh } = usePowerHistory();
-  const [activeTab, setActiveTab] = useState<TabKey>("uptime");
+  const [activeTab, setActiveTab] = useState<TabKey>("shutdowns");
 
   const lastStop = useMemo(() => {
     if (!snapshot) {
@@ -566,17 +447,27 @@ export function Power() {
     return stops[0] ?? null;
   }, [snapshot]);
 
+  const powerStatus =
+    !snapshot || snapshot.uptimeSeconds === null
+      ? "Unknown"
+      : snapshot.uptimeSeconds >= 7 * 86400
+        ? "Restart recommended"
+        : "Normal";
+
+  const powerStatusClass =
+    powerStatus === "Restart recommended"
+      ? "text-warning"
+      : powerStatus === "Unknown"
+        ? "text-muted-foreground"
+        : "text-success";
+
   const counts: Record<TabKey, number | null> = {
-    uptime: null,
     shutdowns: snapshot?.shutdowns.length ?? null,
     restarts: snapshot?.restarts.length ?? null,
     "power-offs": snapshot?.powerOffs.length ?? null,
   };
 
-  function handleTabKeyDown(
-    event: KeyboardEvent<HTMLButtonElement>,
-    current: TabKey,
-  ) {
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: TabKey) {
     const index = TAB_KEYS.indexOf(current);
     let next: TabKey | null = null;
 
@@ -599,46 +490,25 @@ export function Power() {
 
   if (status === "loading" && !snapshot) {
     return (
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
-        <PageHeader status={status} refreshing onRefresh={refresh} />
-        <section className="bg-surface p-5">
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Reading the System log
-          </h2>
-          <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-            Uptime and the retained power events arrive together. Nothing is
-            drawn until the read finishes.
-          </p>
-        </section>
-      </div>
+      <Screen>
+        <StateView title="Reading System log" />
+      </Screen>
     );
   }
 
   if (status === "error" && !snapshot) {
     return (
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
-        <PageHeader status={status} refreshing={false} onRefresh={refresh} />
-        <section className="bg-surface p-5">
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Power history did not load
-          </h2>
-          <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-            Power data comes from the desktop app. Run it with{" "}
-            <span className="font-mono">npm run tauri dev</span>, not{" "}
-            <span className="font-mono">npm run dev</span>.
-          </p>
-          <p className="mt-3 bg-surface-muted px-3 py-2 font-mono text-[11px] leading-4 break-words text-muted-foreground">
-            {error ?? "Unknown error"}
-          </p>
-          <button
-            type="button"
-            onClick={refresh}
-            className="mt-4 min-h-10 bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors duration-[120ms] ease-soft hover:bg-primary/90"
-          >
-            Try again
-          </button>
-        </section>
-      </div>
+      <Screen>
+        <StateView
+          title="Power history unavailable"
+          code={error ?? "Unknown error"}
+          action={
+            <Button variant="primary" onClick={refresh}>
+              Try again
+            </Button>
+          }
+        />
+      </Screen>
     );
   }
 
@@ -647,14 +517,7 @@ export function Power() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
-      <PageHeader
-        status={status}
-        capturedAt={snapshot.capturedAt}
-        refreshing={status === "loading"}
-        onRefresh={refresh}
-      />
-
+    <Screen>
       {status === "error" ? (
         <ErrorBanner
           title="The refresh failed"
@@ -673,13 +536,95 @@ export function Power() {
         />
       ) : null}
 
+      <div className="grid grid-cols-3 divide-x divide-y divide-border-subtle border border-border">
+        <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <ClockIcon size={12} aria-hidden="true" />
+              Uptime
+            </span>
+            <span className={`inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize ${powerStatusClass}`}>
+              {powerStatus === "Restart recommended" ? (
+                <ArrowClockwiseIcon size={10} aria-hidden="true" />
+              ) : (
+                <CheckCircleIcon size={10} aria-hidden="true" />
+              )}
+              {powerStatus}
+            </span>
+          </div>
+          <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
+            {snapshot.uptimeSeconds === null ? "—" : formatUptime(snapshot.uptimeSeconds)}
+          </span>
+          <div title={powerStatus === "Restart recommended" ? "Uptime exceeded 7 days. Restart recommended." : "Uptime under 7 days. Normal."}>
+            <Meter
+              className="mt-2"
+              label="Uptime progress"
+              value={snapshot.uptimeSeconds ?? 0}
+              max={7 * 86400}
+              tone={powerStatus === "Restart recommended" ? "warning" : "success"}
+            />
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <PulseIcon size={12} aria-hidden="true" />
+              Active time
+            </span>
+            <span className="inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize text-success">
+              <CheckCircleIcon size={10} aria-hidden="true" />
+              Normal
+            </span>
+          </div>
+          <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
+            {snapshot.activeSeconds === null ? "—" : formatUptime(snapshot.activeSeconds)}
+          </span>
+          <div title="Active time under 7 days. Normal.">
+            <Meter
+              className="mt-2"
+              label="Active time progress"
+              value={snapshot.activeSeconds ?? 0}
+              max={7 * 86400}
+              tone="success"
+            />
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <MoonIcon size={12} aria-hidden="true" />
+              Sleep time
+            </span>
+            <span className="inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize text-success">
+              <CheckCircleIcon size={10} aria-hidden="true" />
+              Normal
+            </span>
+          </div>
+          <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
+            {snapshot.sleepSeconds === null ? "—" : formatUptime(snapshot.sleepSeconds)}
+          </span>
+          <div title="Sleep time under 7 days. Normal.">
+            <Meter
+              className="mt-2"
+              label="Sleep time progress"
+              value={snapshot.sleepSeconds ?? 0}
+              max={7 * 86400}
+              tone="success"
+            />
+          </div>
+        </div>
+      </div>
+
       <div
         role="tablist"
         aria-label="Power history"
-        className="flex flex-wrap gap-1 bg-surface p-1"
+        className="flex items-center gap-6 border-b border-border-subtle"
       >
         {TAB_KEYS.map((key) => {
           const count = counts[key];
+          const current = activeTab === key;
 
           return (
             <button
@@ -687,21 +632,22 @@ export function Power() {
               id={`power-tab-${key}`}
               type="button"
               role="tab"
-              aria-selected={activeTab === key}
+              aria-selected={current}
               aria-controls={`power-panel-${key}`}
-              tabIndex={activeTab === key ? 0 : -1}
+              tabIndex={current ? 0 : -1}
               onClick={() => setActiveTab(key)}
               onKeyDown={(event) => handleTabKeyDown(event, key)}
               className={cn(
-                "flex min-h-10 items-center gap-2 px-3 text-xs font-medium transition-colors duration-[120ms] ease-soft",
-                activeTab === key
-                  ? "bg-surface-muted text-foreground shadow-item"
-                  : "text-muted-foreground hover:bg-surface-muted hover:text-foreground",
+                "relative -mb-px flex min-h-10 items-center gap-2 text-[12px] font-medium whitespace-nowrap transition-colors duration-[120ms] ease-soft",
+                "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:rounded-full after:bg-primary after:transition-transform after:duration-200 after:ease-soft",
+                current
+                  ? "text-foreground after:scale-x-100"
+                  : "text-muted-foreground after:scale-x-0 hover:text-foreground",
               )}
             >
               {TAB_LABELS[key]}
               {count === null ? null : (
-                <span className="font-mono text-[10px] leading-none tabular-nums text-muted-foreground">
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                   {count}
                 </span>
               )}
@@ -710,99 +656,64 @@ export function Power() {
         })}
       </div>
 
-      {!snapshot.logError ? (
-        <CoverageNotice log={snapshot.log} truncated={snapshot.truncated} />
-      ) : null}
-
-      <div
-        id="power-panel-uptime"
-        role="tabpanel"
-        aria-labelledby="power-tab-uptime"
-        hidden={activeTab !== "uptime"}
-      >
-        <div className="flex flex-col gap-6">
-          <UptimePanel snapshot={snapshot} lastStop={lastStop} />
-        </div>
-      </div>
-
       <div
         id="power-panel-shutdowns"
         role="tabpanel"
         aria-labelledby="power-tab-shutdowns"
+        className="flex flex-col gap-4"
         hidden={activeTab !== "shutdowns"}
       >
-        <div className="flex flex-col gap-6">
-          <PanelIntro
-            title="Shutdowns"
-            detail="Shutdown requests Windows recorded, with the clean stop when one followed. Unconfirmed requests stay visible."
-          />
-          {snapshot.fastStartup ? (
-            <p className="bg-surface px-4 py-3 text-[11px] leading-4 text-muted-foreground">
-              Fast Startup is on. A normal shutdown hibernates the kernel session
-              instead of stopping services, so it can log the request without a
-              clean-stop event. A shutdown can stay listed as unconfirmed even
-              when it completed.
-            </p>
-          ) : null}
-          <RecordList
-            records={snapshot.shutdowns}
-            emptyTitle="No shutdown requests in the retained log"
-            emptyDetail="Windows logs a request when a shutdown starts. A forced power off leaves no request; check Power offs for unexpected stops."
-          />
-          {snapshot.unclassifiedStops.length > 0 ? (
-            <section className="flex flex-col gap-3">
-              <PanelIntro
-                title="Clean stops without a request"
-                detail="Windows stopped the System log cleanly but did not record whether it was a shutdown or a restart."
-              />
-              <RecordList
-                records={snapshot.unclassifiedStops}
-                emptyTitle="No clean stops without a request"
-                emptyDetail="Every clean stop in the retained log has a matching request."
-              />
-            </section>
-          ) : null}
-        </div>
+        {snapshot.fastStartup ? (
+          <p className="px-1 text-[11px] leading-4 text-muted-foreground">
+            Fast Startup is on. Some shutdowns can appear unconfirmed.
+          </p>
+        ) : null}
+        <RecordTable
+          label="Shutdown records"
+          records={snapshot.shutdowns}
+          emptyTitle="No shutdowns recorded"
+        />
+        {snapshot.unclassifiedStops.length > 0 ? (
+          <div className="mt-2 flex flex-col gap-3">
+            <h2 className="px-1 text-[13px] font-medium text-foreground">
+              Clean stops without a request
+            </h2>
+            <RecordTable
+              label="Clean stops without a request"
+              records={snapshot.unclassifiedStops}
+              emptyTitle="No clean stops without a request"
+            />
+          </div>
+        ) : null}
       </div>
 
       <div
         id="power-panel-restarts"
         role="tabpanel"
         aria-labelledby="power-tab-restarts"
+        className="flex flex-col gap-4"
         hidden={activeTab !== "restarts"}
       >
-        <div className="flex flex-col gap-6">
-          <PanelIntro
-            title="Restarts"
-            detail="Restart requests Windows recorded, with the clean stop when one followed. Windows Update and app installers show up here too."
-          />
-          <RecordList
-            records={snapshot.restarts}
-            emptyTitle="No restart requests in the retained log"
-            emptyDetail="Windows logs a request when a restart starts. An unexpected restart appears in Power offs instead."
-          />
-        </div>
+        <RecordTable
+          label="Restart records"
+          records={snapshot.restarts}
+          emptyTitle="No restarts recorded"
+        />
       </div>
 
       <div
         id="power-panel-power-offs"
         role="tabpanel"
         aria-labelledby="power-tab-power-offs"
+        className="flex flex-col gap-4"
         hidden={activeTab !== "power-offs"}
       >
-        <div className="flex flex-col gap-6">
-          <PanelIntro
-            title="Power offs"
-            detail="Stops Windows could not pair with a clean shutdown. Kernel-Power 41 and Event Log 6008 normally appear after the next boot."
-          />
-          <PowerGuide />
-          <RecordList
-            records={snapshot.powerOffs}
-            emptyTitle="No unexpected stops in the retained log"
-            emptyDetail="A power loss only appears after the next boot. If the PC just lost power and has not restarted, there is nothing to read yet."
-          />
-        </div>
+        <RecordTable
+          label="Power-off records"
+          records={snapshot.powerOffs}
+          emptyTitle="No unexpected stops recorded"
+        />
       </div>
-    </div>
+    </Screen>
   );
 }

@@ -9,6 +9,7 @@
     "allow-get-processes",
     "allow-set-resource-streaming",
     "allow-thermal-history",
-    "allow-recheck-thermals"
+    "allow-recheck-thermals",
+    "allow-power-history"
   ]
 }

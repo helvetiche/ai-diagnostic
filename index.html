@@ -3,7 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>windog-ai</title>
+    <meta name="color-scheme" content="dark light" />
+    <title>Windog</title>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("windog.theme");
+          var saved = raw ? JSON.parse(raw) : {};
+          var mode = saved.mode === "light" || saved.mode === "dark" ? saved.mode : "system";
+          var accents = ["steel", "jade", "clay", "plum"];
+          var accent = accents.indexOf(saved.accent) >= 0 ? saved.accent : "steel";
+          var dark =
+            mode === "dark" ||
+            (mode === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.dataset.accent = accent;
+        } catch (error) {
+          document.documentElement.dataset.accent = "steel";
+        }
+      })();
+    </script>
   </head>
 
   <body>

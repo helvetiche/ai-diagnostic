@@ -1,4 +1,6 @@
+import { useId, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+
 import {
   ChartContainer,
   ChartTooltip,
@@ -6,8 +8,6 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
-import { formatPercent } from "@/lib/format";
-import { loadLevel } from "@/lib/loadLevel";
 
 export type ChartSeries = {
   key: string;
@@ -21,15 +21,12 @@ export type ChartPoint = {
   [key: string]: number;
 };
 
-type ChartMeter = {
-  value: number | null;
-  label?: string;
-};
-
 type ResourceChartProps = {
-  title: string;
-  description?: string;
-  icon?: React.ReactNode;
+  label: string;
+  icon?: ReactNode;
+  meta?: string;
+  metaMono?: boolean;
+  value: string;
   data: ChartPoint[];
   series: ChartSeries[];
   emptyMessage: string;
@@ -37,7 +34,6 @@ type ResourceChartProps = {
   yDomain?: [number | "auto", number | "auto"];
   yTickFormatter?: (value: number) => string;
   renderTooltipFooter?: (sampledAt: number) => React.ReactNode;
-  meter?: ChartMeter;
   className?: string;
   chartClassName?: string;
 };
@@ -67,8 +63,7 @@ type ResourceTooltipProps = {
 
 function ResourceTooltip({ active, payload, label, series, renderFooter }: ResourceTooltipProps) {
   const sampledAt = typeof label === "number" ? label : Number(label);
-  const footer =
-    renderFooter && Number.isFinite(sampledAt) ? renderFooter(sampledAt) : null;
+  const footer = renderFooter && Number.isFinite(sampledAt) ? renderFooter(sampledAt) : null;
 
   return (
     <ChartTooltipContent
@@ -85,48 +80,12 @@ function ResourceTooltip({ active, payload, label, series, renderFooter }: Resou
   );
 }
 
-function LoadMeter({ title, label, value }: { title: string; label: string; value: number }) {
-  const level = loadLevel(value);
-  const percent = Number.isFinite(value) ? Math.min(Math.max(value, 0), 100) : 0;
-
-  return (
-    <div className="mt-2.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-          {label}
-        </span>
-        <span className="flex items-baseline gap-2">
-          <span className="font-mono text-[11px] leading-4 tabular-nums text-foreground">
-            {formatPercent(value)}
-          </span>
-          <span
-            className={`px-1.5 py-0.5 text-[11px] leading-4 font-medium ${level.badgeClassName}`}
-          >
-            {level.label}
-          </span>
-        </span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label={`${title} ${label.toLowerCase()}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-        className="mt-1.5 h-2 w-full bg-surface-muted"
-      >
-        <div
-          aria-hidden="true"
-          className={`h-full transition-[width] duration-300 ease-soft ${level.barClassName}`}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export function ResourceChart({
-  title,
+  label,
   icon,
+  meta,
+  metaMono = false,
+  value,
   data,
   series,
   emptyMessage,
@@ -134,90 +93,140 @@ export function ResourceChart({
   yDomain,
   yTickFormatter,
   renderTooltipFooter,
-  meter,
   className,
-  chartClassName = "h-56",
+  chartClassName = "h-32",
 }: ResourceChartProps) {
+  const uid = useId().replace(/:/g, "");
+
   const config: ChartConfig = Object.fromEntries(
     series.map((item) => [item.key, { label: item.label, color: item.color }]),
   );
 
   return (
-    <figure className={cn("bg-surface p-5 border border-border", className)}>
-      <header className="border border-border px-3 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {icon ? <span className="text-muted-foreground">{icon}</span> : null}
-            <span className="font-mono text-xs font-medium text-foreground">{title}</span>
-          </div>
-
-          <ul className="flex flex-wrap items-center gap-3 text-[11px] leading-4 font-medium text-muted-foreground">
-            {series.map((item) => (
-              <li key={item.key} className="flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="size-2 shrink-0"
-                  style={{ backgroundColor: item.color }}
-                />
-                {item.label}
-              </li>
-            ))}
-          </ul>
+    <figure
+      className={cn(
+        "border border-border-subtle p-4",
+        className,
+      )}
+    >
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <figcaption
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 truncate text-[12px] leading-5 font-medium text-foreground",
+              metaMono && "font-mono",
+            )}
+          >
+            {icon ? (
+              <span aria-hidden="true" className="shrink-0 text-muted-foreground">
+                {icon}
+              </span>
+            ) : null}
+            <span className="truncate">{label}</span>
+          </figcaption>
+          {meta ? (
+            <p
+              className={cn(
+                "truncate text-[11px] leading-4 text-muted-foreground",
+                metaMono && "font-mono",
+              )}
+            >
+              {meta}
+            </p>
+          ) : null}
         </div>
 
-        {meter && meter.value !== null ? (
-          <LoadMeter
-            title={title}
-            label={meter.label ?? "Load"}
-            value={meter.value}
-          />
-        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="font-mono text-[15px] leading-6 font-light tabular-nums text-foreground">
+            {value}
+          </span>
+          {series.length > 1 ? (
+            <ul className="flex items-center gap-2.5">
+              {series.map((item) => (
+                <li
+                  key={item.key}
+                  className="flex items-center gap-1.5 text-[10px] leading-4 text-muted-foreground"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-0.5 w-2 shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  {item.label}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       </header>
 
-      <div className="mt-4">
+      <div className="mt-3">
         {data.length < 2 ? (
-          <div className="flex h-56 items-center justify-center bg-surface-muted px-4 text-center text-xs text-muted-foreground">
+          <div
+            className={cn(
+              "flex items-center justify-center text-[11px] text-muted-foreground",
+              chartClassName,
+            )}
+          >
             {emptyMessage}
           </div>
         ) : (
-          <ChartContainer config={config} className={cn(chartClassName, "w-full")} aria-label={ariaLabel}>
-            <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
+          <ChartContainer
+            config={config}
+            role="img"
+            aria-label={ariaLabel}
+            className={cn(chartClassName, "w-full")}
+          >
+            <AreaChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
+              <defs>
+                {series.map((item) => (
+                  <linearGradient
+                    key={item.key}
+                    id={`${uid}-${item.key}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="0%" stopColor={item.color} stopOpacity={0.18} />
+                    <stop offset="100%" stopColor={item.color} stopOpacity={0} />
+                  </linearGradient>
+                ))}
+              </defs>
               <CartesianGrid
-                vertical={false}
-                stroke="var(--border)"
-                strokeDasharray="4 4"
+                vertical
+                stroke="var(--border-subtle)"
+                strokeDasharray="3 4"
               />
               <XAxis
                 dataKey="sampledAt"
                 type="number"
                 domain={["dataMin", "dataMax"]}
-                tickFormatter={formatClock}
+                tick={false}
                 tickLine={false}
                 axisLine={false}
-                minTickGap={56}
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                height={4}
               />
               <YAxis
                 domain={yDomain ?? ["auto", "auto"]}
                 tickFormatter={yTickFormatter}
                 tickLine={false}
                 axisLine={false}
-                width={46}
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                width={34}
+                tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
               />
               <ChartTooltip
-                cursor={{ stroke: "var(--border)" }}
+                cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
                 content={<ResourceTooltip series={series} renderFooter={renderTooltipFooter} />}
               />
               {series.map((item) => (
                 <Area
                   key={item.key}
-                  type="linear"
+                  type="monotone"
                   dataKey={item.key}
                   stroke={item.color}
-                  strokeWidth={2}
-                  fill={item.color}
-                  fillOpacity={0.12}
+                  strokeWidth={1.5}
+                  fill={`url(#${uid}-${item.key})`}
                   dot={false}
                   isAnimationActive={false}
                 />

@@ -95,7 +95,7 @@ function ChartTooltipContent({
   return (
     <div
       className={cn(
-        "grid min-w-36 gap-1.5 border border-border bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-soft",
+        "glass grid min-w-36 gap-1.5 rounded-control px-3 py-2 text-xs text-popover-foreground",
         className,
       )}
       {...props}
@@ -117,7 +117,7 @@ function ChartTooltipContent({
               <span className="flex items-center gap-1.5 text-muted-foreground">
                 <span
                   aria-hidden="true"
-                  className="size-2 shrink-0"
+                  className="size-2 shrink-0 rounded-full"
                   style={{ backgroundColor: item.color ?? itemConfig?.color }}
                 />
                 {itemConfig?.label ?? item.name ?? dataKey}
@@ -132,7 +132,7 @@ function ChartTooltipContent({
         })}
       </div>
 
-      {footer ? <div className="border-t border-border pt-1.5">{footer}</div> : null}
+      {footer ? <div className="border-t border-border-subtle pt-1.5">{footer}</div> : null}
     </div>
   );
 }

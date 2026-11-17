@@ -1,97 +1,48 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
+  ArrowUpIcon,
   ArrowsDownUpIcon,
-  CaretRightIcon,
   CpuIcon,
-  DownloadSimpleIcon,
+  GaugeIcon,
   GraphicsCardIcon,
   MemoryIcon,
+  PlugsConnectedIcon,
   ThermometerSimpleIcon,
-  UploadSimpleIcon,
 } from "@phosphor-icons/react";
+
+import { Screen } from "@/components/layout/Screen";
+import { Meter, type MeterTone } from "@/components/primitives/Meter";
+import { Reading } from "@/components/primitives/Reading";
+import { RollingValue } from "@/components/primitives/RollingValue";
+import { StateView } from "@/components/primitives/StateView";
 import { ResourceChart, type ChartPoint, type ChartSeries } from "@/components/ResourceChart";
-import { type ResourceStreamStatus, useResourceStream } from "@/hooks/useResourceStream";
-import { type ThermalStreamStatus, useThermalStream } from "@/hooks/useThermalStream";
-import { formatBytes, formatCelsius, formatPercent, formatRate, formatUptime } from "@/lib/format";
-import { processLevel } from "@/lib/processLevel";
+import { Button } from "@/components/primitives/Button";
+import { useResourceStream } from "@/hooks/useResourceStream";
+import { useThermalStream } from "@/hooks/useThermalStream";
+import { formatBytes, formatCelsius, formatPercent, formatRate } from "@/lib/format";
+import { loadTone, loadStatus, loadStatusClass, networkStatus } from "@/lib/loadLevel";
+import { thermalStatus, thermalStatusClass } from "@/lib/thermalLevel";
 import { cn } from "@/lib/utils";
-import type {
-  DiskSample,
-  GpuSample,
-  ResourceSample,
-  TopNetworkProcess,
-  TopProcess,
-} from "@/types/resources";
+import type { DiskSample, ResourceSample, TopNetworkProcess, TopProcess } from "@/types/resources";
 import type { ThermalSample } from "@/types/thermal";
-
-function StatusLine({ status }: { status: ResourceStreamStatus }) {
-  const label =
-    status === "live"
-      ? "Sampling every 1 s"
-      : status === "paused"
-        ? "Paused while hidden"
-        : status === "loading"
-          ? "Starting sampler"
-          : "Sampler unavailable";
-
-  return (
-    <p className="flex items-center gap-2 text-[11px] leading-4 font-medium text-muted-foreground">
-      <span
-        aria-hidden="true"
-        className={cn(
-          "size-2 shrink-0",
-          status === "live" && "bg-primary",
-          status === "paused" && "bg-muted-foreground",
-          status === "loading" && "bg-muted-foreground",
-          status === "error" && "bg-critical",
-        )}
-      />
-      {label}
-    </p>
-  );
-}
-
-function PageHeader({ uptime, status }: { uptime: number | null; status: ResourceStreamStatus }) {
-  return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-2xl leading-8 font-semibold tracking-[-0.02em] text-foreground">
-          Resource Graph
-        </h1>
-        <p className="mt-1.5 max-w-lg text-xs leading-5 text-muted-foreground">
-          Live counters read from this machine, once per second.
-          {uptime === null ? "" : ` System up ${formatUptime(uptime)}.`}
-        </p>
-      </div>
-      <StatusLine status={status} />
-    </header>
-  );
-}
 
 function TooltipProcessRow({
   name,
-  percent,
   value,
+  emphasis = false,
 }: {
   name: string;
-  percent: number;
   value: string;
+  emphasis?: boolean;
 }) {
-  const level = processLevel(percent);
-
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-        <span
-          aria-hidden="true"
-          className="size-2 shrink-0"
-          style={{ backgroundColor: level.color }}
-        />
-        <span className="max-w-32 truncate">{name}</span>
-      </span>
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="truncate text-[11px] text-muted-foreground">{name}</span>
       <span
-        className="shrink-0 px-1.5 py-0.5 font-mono text-[10px] leading-4 tabular-nums"
-        style={{ backgroundColor: `${level.color}20`, color: level.color }}
+        className={cn(
+          "shrink-0 font-mono text-[10px] tabular-nums",
+          emphasis ? "text-foreground" : "text-muted-foreground",
+        )}
       >
         {value}
       </span>
@@ -99,15 +50,13 @@ function TooltipProcessRow({
   );
 }
 
-function TopProcessTooltipSection({
+function TopProcessSection({
   title,
-  icon: SectionIcon,
   processes,
   metric,
   memoryTotal,
 }: {
   title: string;
-  icon: typeof CpuIcon;
   processes: TopProcess[];
   metric: "cpu" | "memory" | "gpu";
   memoryTotal: number;
@@ -124,48 +73,35 @@ function TopProcessTooltipSection({
 
   return (
     <div className="grid gap-1">
-      <p className="flex items-center gap-1.5 text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-        <SectionIcon size={12} aria-hidden="true" />
-        {title}
-      </p>
+      <p className="text-[10px] font-medium text-muted-foreground">{title}</p>
       {processes.length === 0 ? (
-        <p className="text-muted-foreground">No activity</p>
+        <p className="text-[11px] text-muted-foreground">No activity</p>
       ) : (
-        processes.map((process) => {
-          const percent = processPercent(process);
-
-          return (
-            <TooltipProcessRow
-              key={process.name}
-              name={process.name}
-              percent={percent}
-              value={metric === "memory" ? formatBytes(process.memory) : formatPercent(percent)}
-            />
-          );
-        })
+        processes.map((process) => (
+          <TooltipProcessRow
+            key={process.name}
+            name={process.name}
+            value={metric === "memory" ? formatBytes(process.memory) : formatPercent(processPercent(process))}
+          />
+        ))
       )}
     </div>
   );
 }
 
-function TopProcessTooltipFooter({
+function TopProcessFooter({
   sample,
-  title,
-  icon,
   metric,
 }: {
   sample: ResourceSample;
-  title: string;
-  icon: typeof CpuIcon;
   metric: "cpu" | "memory" | "gpu";
 }) {
   const processes =
     metric === "cpu" ? sample.topCpu : metric === "memory" ? sample.topMemory : sample.topGpu;
 
   return (
-    <TopProcessTooltipSection
-      title={title}
-      icon={icon}
+    <TopProcessSection
+      title={metric === "memory" ? "Top memory" : metric === "gpu" ? "Top GPU" : "Top CPU"}
       processes={processes ?? []}
       metric={metric}
       memoryTotal={sample.memoryTotal}
@@ -173,311 +109,320 @@ function TopProcessTooltipFooter({
   );
 }
 
-function TopNetworkTooltipSection({
+function NetworkSection({
   title,
-  icon: SectionIcon,
   processes,
-  total,
 }: {
   title: string;
-  icon: typeof CpuIcon;
   processes: TopNetworkProcess[];
-  total: number;
 }) {
   return (
     <div className="grid gap-1">
-      <p className="flex items-center gap-1.5 text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-        <SectionIcon size={12} aria-hidden="true" />
-        {title}
-      </p>
+      <p className="text-[10px] font-medium text-muted-foreground">{title}</p>
       {processes.length === 0 ? (
-        <p className="text-muted-foreground">No activity</p>
+        <p className="text-[11px] text-muted-foreground">No activity</p>
       ) : (
-        processes.map((process) => {
-          const percent = total > 0 ? Math.min((process.rate / total) * 100, 100) : 0;
-
-          return (
-            <TooltipProcessRow
-              key={process.name}
-              name={process.name}
-              percent={percent}
-              value={formatRate(process.rate)}
-            />
-          );
-        })
+        processes.map((process) => (
+          <TooltipProcessRow key={process.name} name={process.name} value={formatRate(process.rate)} />
+        ))
       )}
     </div>
   );
 }
 
-function NetworkTooltipFooter({ sample }: { sample: ResourceSample }) {
+function NetworkFooter({ sample }: { sample: ResourceSample }) {
   if (!sample.networkAttribution) {
     return (
       <div className="grid gap-1">
-        <p className="flex items-center gap-1.5 text-[10px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-          <ArrowsDownUpIcon size={12} aria-hidden="true" />
-          Per-app network
-        </p>
-        <p className="text-muted-foreground">Per-app network needs administrator access.</p>
+        <p className="text-[10px] font-medium text-muted-foreground">Per-app network</p>
+        <p className="text-[11px] leading-4 text-muted-foreground">Admin access required.</p>
       </div>
     );
   }
 
   return (
     <div className="grid gap-1.5">
-      <TopNetworkTooltipSection
-        title="Top download"
-        icon={DownloadSimpleIcon}
-        processes={sample.topDownload ?? []}
-        total={sample.download}
-      />
-      <TopNetworkTooltipSection
-        title="Top upload"
-        icon={UploadSimpleIcon}
-        processes={sample.topUpload ?? []}
-        total={sample.upload}
-      />
+      <NetworkSection title="Top download" processes={sample.topDownload ?? []} />
+      <NetworkSection title="Top upload" processes={sample.topUpload ?? []} />
     </div>
   );
 }
 
-function VolumeRow({ name, mount, total, available, removable, kind }: {
-  name: string;
-  mount: string;
-  total: number;
-  available: number;
-  removable: boolean;
-  kind: string;
+function VitalNote({ children }: { children?: ReactNode }) {
+  return (
+    <p className="mt-1 min-h-4 truncate font-mono text-[11px] leading-4 tabular-nums text-muted-foreground">
+      {children ?? "\u00A0"}
+    </p>
+  );
+}
+
+type VitalStatusItem = {
+  label: string;
+  value: string;
+  className: string;
+  icon: ReactNode;
+};
+
+function VitalStatus({ items }: { items: VitalStatusItem[] }) {
+  return (
+    <span className="flex flex-wrap items-center justify-end gap-1">
+      {items.map((item) => (
+        <span
+          key={item.label}
+          title={item.label}
+          className={cn(
+            "inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 whitespace-nowrap capitalize",
+            item.className,
+          )}
+        >
+          <span aria-hidden="true" className="shrink-0">
+            {item.icon}
+          </span>
+          <span className="sr-only">{item.label}: </span>
+          {item.value}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Vitals({
+  latest,
+  thermal,
+}: {
+  latest: ResourceSample;
+  thermal: ThermalSample | null;
 }) {
-  const used = total > 0 ? ((total - available) / total) * 100 : 0;
-  const status =
-    used >= 90 ? "critical" : used >= 80 ? "warning" : "healthy";
-  const statusLabel =
-    status === "critical"
-      ? "Almost full"
-      : status === "warning"
-        ? "Low space"
-        : "Healthy";
-  const statusColor =
-    status === "critical"
-      ? "bg-critical text-critical"
-      : status === "warning"
-        ? "bg-warning text-warning"
-        : "bg-success text-success";
-  const barColor =
-    status === "critical"
-      ? "bg-critical"
-      : status === "warning"
-        ? "bg-warning"
-        : "bg-success";
+  const memoryPercent =
+    latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
+  const gpu = latest.gpus[0] ?? null;
+  const gpuLoad = gpu?.usage == null ? null : loadTone(gpu.usage);
+  const gpuTone =
+    gpuLoad === "elevated"
+      ? "warning"
+      : gpuLoad === "high" || gpuLoad === "peak"
+        ? "critical"
+        : "default";
+  const cpuTemp = thermal?.cpu.package?.celsius ?? thermal?.cpu.hottestCore?.celsius ?? null;
+  const gpuTemps =
+    thermal?.gpus.map((item) => item.celsius).filter((value) => value !== null) ?? [];
+  const gpuTemp = gpuTemps.length > 0 ? Math.max(...gpuTemps) : null;
+
+  const cpuStatus = loadStatus(latest.cpu);
+  const cpuThermal = thermalStatus(cpuTemp, "cpu");
+  const gpuStatus = loadStatus(gpu?.usage ?? null);
+  const gpuThermal = thermalStatus(gpuTemp, "gpu");
+  const memoryStatus = loadStatus(memoryPercent);
+  const downloadStatus = networkStatus(latest.download + latest.upload);
 
   return (
-    <li className="py-3 first:pt-0 last:pb-0">
+    <div className="grid grid-cols-4 divide-x divide-border-subtle border border-border [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:p-3 sm:[&>div]:p-4">
+      <div>
+        <Reading
+          label="CPU"
+          value={formatPercent(latest.cpu)}
+          icon={<CpuIcon size={12} />}
+          size="compact"
+          status={
+            <VitalStatus
+              items={[
+                {
+                  label: "Load",
+                  value: cpuStatus ?? "—",
+                  className: loadStatusClass(cpuStatus),
+                  icon: <GaugeIcon size={10} />,
+                },
+                {
+                  label: "Temperature",
+                  value: cpuThermal ?? "—",
+                  className: thermalStatusClass(cpuThermal),
+                  icon: <ThermometerSimpleIcon size={10} />,
+                },
+              ]}
+            />
+          }
+        />
+        <div className="mt-auto">
+          <Meter
+            label="CPU load"
+            value={latest.cpu}
+            tone={loadTone(latest.cpu)}
+          />
+          <VitalNote>
+            <RollingValue value={cpuTemp === null ? "—" : formatCelsius(cpuTemp)} />
+          </VitalNote>
+        </div>
+      </div>
+
+      <div>
+        <Reading
+          label="GPU"
+          value={gpu?.usage == null ? "—" : formatPercent(gpu.usage)}
+          tone={gpuTone}
+          icon={<GraphicsCardIcon size={12} />}
+          size="compact"
+          status={
+            <VitalStatus
+              items={[
+                {
+                  label: "Load",
+                  value: gpuStatus ?? "—",
+                  className: loadStatusClass(gpuStatus),
+                  icon: <GaugeIcon size={10} />,
+                },
+                {
+                  label: "Temperature",
+                  value: gpuThermal ?? "—",
+                  className: thermalStatusClass(gpuThermal),
+                  icon: <ThermometerSimpleIcon size={10} />,
+                },
+              ]}
+            />
+          }
+        />
+        <div className="mt-auto">
+          <Meter
+            label="GPU load"
+            value={gpu?.usage ?? null}
+            tone={loadTone(gpu?.usage ?? 0)}
+          />
+          <VitalNote>
+            <RollingValue value={gpuTemp === null ? "—" : formatCelsius(gpuTemp)} />
+          </VitalNote>
+        </div>
+      </div>
+
+      <div>
+        <Reading
+          label="Memory"
+          value={formatPercent(memoryPercent)}
+          icon={<MemoryIcon size={12} />}
+          size="compact"
+          status={
+            <VitalStatus
+              items={[
+                {
+                  label: "Load",
+                  value: memoryStatus ?? "—",
+                  className: loadStatusClass(memoryStatus),
+                  icon: <GaugeIcon size={10} />,
+                },
+              ]}
+            />
+          }
+        />
+        <div className="mt-auto">
+          <Meter
+            label="Memory load"
+            value={memoryPercent}
+            tone={loadTone(memoryPercent)}
+          />
+          <VitalNote>
+            <RollingValue
+              value={`${formatBytes(latest.memoryUsed)} of ${formatBytes(latest.memoryTotal)}`}
+            />
+          </VitalNote>
+        </div>
+      </div>
+
+      <div>
+        <Reading
+          label="Download"
+          value={formatRate(latest.download)}
+          icon={<PlugsConnectedIcon size={12} />}
+          size="compact"
+          status={
+            <VitalStatus
+              items={[
+                {
+                  label: "Activity",
+                  value: downloadStatus,
+                  className: loadStatusClass(downloadStatus),
+                  icon: <ArrowsDownUpIcon size={10} />,
+                },
+              ]}
+            />
+          }
+        />
+        <div className="mt-auto">
+          <p className="truncate font-mono text-[10px] leading-4 text-muted-foreground">
+            {latest.networkInterfaces.join(", ") || "No adapter"}
+          </p>
+          <VitalNote>
+            <span className="inline-flex items-center gap-1">
+              <ArrowUpIcon size={11} aria-hidden="true" />
+              <span className="font-mono tabular-nums">
+                <RollingValue value={formatRate(latest.upload)} />
+              </span>
+            </span>
+          </VitalNote>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VolumeRow({ disk }: { disk: DiskSample }) {
+  const used = disk.total > 0 ? ((disk.total - disk.available) / disk.total) * 100 : 0;
+  const tone: MeterTone = used >= 90 ? "critical" : used >= 80 ? "warning" : "success";
+  const note = used >= 90 ? "Almost full" : used >= 80 ? "Low space" : null;
+
+  return (
+    <li className="flex min-w-0 flex-col gap-2 p-3 sm:p-4">
       <div className="flex items-baseline justify-between gap-3">
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate text-xs font-medium text-foreground">{name}</span>
-          {removable ? (
-            <span className="text-[11px] leading-4 text-muted-foreground">Removable</span>
+          <span className="truncate text-[12px] font-medium text-foreground">{disk.name}</span>
+          {disk.removable ? (
+            <span className="text-[10px] text-muted-foreground">Removable</span>
           ) : null}
         </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <span className="flex items-center gap-1.5">
-            <span aria-hidden="true" className={`size-2 shrink-0 ${statusColor.split(" ")[0]}`} />
-            <span className={`text-[11px] leading-4 font-medium ${statusColor.split(" ")[1]}`}>
-              {statusLabel}
-            </span>
-          </span>
-          <span className="font-mono text-[11px] leading-4 text-muted-foreground">
-            {kind}
-          </span>
-          <span className="font-mono text-[11px] leading-4 text-muted-foreground">
-            {mount}
-          </span>
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {disk.mount} · {disk.kind}
         </span>
       </div>
 
-      <div aria-hidden="true" className="mt-2 h-1.5 w-full bg-surface-muted">
-        <div className={`h-full ${barColor}`} style={{ width: `${Math.min(used, 100)}%` }} />
-      </div>
+      <Meter className="mt-2" label={`${disk.name} space used`} value={used} tone={tone} />
 
-      <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-        {formatBytes(available)} free of {formatBytes(total)} ({formatPercent(used)} used)
-      </p>
+      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11px]">
+        <span className="text-muted-foreground">
+          {formatBytes(disk.available)} free of {formatBytes(disk.total)}
+        </span>
+        <span className={tone === "critical" ? "text-critical" : "text-muted-foreground"}>
+          {formatPercent(used)} used{note ? ` · ${note}` : ""}
+        </span>
+      </div>
     </li>
   );
 }
 
-function VolumeList({ disks }: { disks: DiskSample[] }) {
-  return (
-    <section className="bg-surface p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Volumes
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Space per mounted volume. Refreshed every five seconds.
-          </p>
-        </div>
-        <p className="text-[11px] leading-4 text-muted-foreground">
-          {disks.length === 1 ? "1 volume" : `${disks.length} volumes`}
-        </p>
-      </div>
-
-      {disks.length === 0 ? (
-        <p className="mt-4 bg-surface-muted px-4 py-6 text-center text-xs text-muted-foreground">
-          No mounted volume reported by Windows.
-        </p>
-      ) : (
-        <ul className="mt-4 divide-y divide-border-subtle">
-          {disks.map((disk) => (
-            <VolumeRow
-              key={`${disk.mount}-${disk.name}`}
-              name={disk.name}
-              mount={disk.mount}
-              total={disk.total}
-              available={disk.available}
-              removable={disk.removable}
-              kind={disk.kind}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function GpuList({ gpus }: { gpus: GpuSample[] }) {
-  if (gpus.length === 0) {
-    return null;
+function StoragePanel({ disks }: { disks: DiskSample[] }) {
+  if (disks.length === 0) {
+    return (
+      <ul
+        className="grid divide-x divide-y divide-border-subtle border border-border"
+        style={{ gridTemplateColumns: "repeat(1, minmax(0, 1fr))" }}
+      >
+        <li className="p-4 text-[11px] text-muted-foreground">No volumes found.</li>
+      </ul>
+    );
   }
 
   return (
-    <section className="bg-surface p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Graphics adapters
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Adapter memory and utilization. Usage may be unavailable on some systems.
-          </p>
-        </div>
-        <p className="text-[11px] leading-4 text-muted-foreground">
-          {gpus.length === 1 ? "1 adapter" : `${gpus.length} adapters`}
-        </p>
-      </div>
-
-      <ul className="mt-4 divide-y divide-border-subtle">
-        {gpus.map((gpu, index) => (
-          <li key={`${gpu.name}-${index}`} className="py-3 first:pt-0 last:pb-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-xs font-medium text-foreground">{gpu.name}</span>
-              <span className="shrink-0 font-mono text-[11px] leading-4 text-muted-foreground">
-                {gpu.usage === null ? "usage n/a" : formatPercent(gpu.usage)}
-              </span>
-            </div>
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-              {formatBytes(gpu.memoryTotal)} dedicated memory
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <ul
+      className="grid divide-x divide-y divide-border-subtle border border-border"
+      style={{ gridTemplateColumns: `repeat(${Math.min(disks.length, 3)}, minmax(0, 1fr))` }}
+    >
+      {disks.map((disk) => (
+        <VolumeRow key={`${disk.mount}-${disk.name}`} disk={disk} />
+      ))}
+    </ul>
   );
 }
 
-function ThermalSummary({
-  sample,
-  status,
-  onOpen,
-}: {
-  sample: ThermalSample | null;
-  status: ThermalStreamStatus;
-  onOpen?: () => void;
-}) {
-  const cpu = sample?.cpu.package?.celsius ?? null;
-  const hottestCore = sample?.cpu.hottestCore?.celsius ?? null;
-  const gpuReadings = sample?.gpus.filter((gpu) => gpu.celsius !== null) ?? [];
-  const hottestGpu = gpuReadings.reduce<number | null>((hottest, gpu) => {
-    if (gpu.celsius === null) {
-      return hottest;
-    }
-
-    return hottest === null || gpu.celsius > hottest ? gpu.celsius : hottest;
-  }, null);
-
-  const loading = status === "loading" && sample === null;
-  const failed = status === "error";
-
-  const cpuText = failed
-    ? "Thermal sampler unavailable."
-    : loading
-      ? "Starting the thermal sampler."
-      : cpu !== null
-        ? `CPU ${formatCelsius(cpu)}${
-            hottestCore !== null ? `, hottest core ${formatCelsius(hottestCore)}` : ""
-          }.`
-        : "CPU temperature unavailable.";
-
-  const gpuText =
-    failed || loading
-      ? ""
-      : gpuReadings.length === 0 || hottestGpu === null
-        ? " GPU temperature unavailable."
-        : sample && sample.gpus.length > 1
-          ? ` ${gpuReadings.length} of ${sample.gpus.length} GPUs reporting, hottest ${formatCelsius(
-              hottestGpu,
-            )}.`
-          : ` GPU ${formatCelsius(hottestGpu)}.`;
-
-  const methods = sample
-    ? [sample.cpu.sensor.methodLabel, ...sample.gpus.map((gpu) => gpu.sensor.methodLabel)].filter(
-        (method, index, all) => all.indexOf(method) === index,
-      )
-    : [];
-
-  return (
-    <section className="bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center bg-surface-muted text-primary">
-            <ThermometerSimpleIcon size={20} aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-              Thermals
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-foreground">
-              {cpuText}
-              {gpuText}
-            </p>
-            {methods.length > 0 ? (
-              <p className="mt-1 font-mono text-[11px] leading-4 text-muted-foreground">
-                {methods.join(" · ")}
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        {onOpen ? (
-          <button
-            type="button"
-            onClick={onOpen}
-            className="flex min-h-10 items-center gap-1.5 bg-surface-muted px-3 text-xs font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-accent"
-          >
-            Open Thermals
-            <CaretRightIcon size={14} aria-hidden="true" />
-          </button>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-export function ResourceGraph({ onOpenThermals }: { onOpenThermals?: () => void }) {
+export function ResourceGraph() {
   const { samples, status, error, retry } = useResourceStream();
-  const { samples: thermalSamples, status: thermalStatus } = useThermalStream();
+  const { samples: thermalSamples } = useThermalStream();
+  const { snapshot: powerSnapshot } = usePowerHistory();
   const latest = samples.at(-1) ?? null;
   const thermalLatest = thermalSamples.at(-1) ?? null;
 
@@ -486,41 +431,75 @@ export function ResourceGraph({ onOpenThermals }: { onOpenThermals?: () => void 
     [samples],
   );
 
+  const powerLastStop = useMemo(() => {
+    if (!powerSnapshot) {
+      return null;
+    }
+
+    const stops = [
+      ...powerSnapshot.shutdowns,
+      ...powerSnapshot.restarts,
+      ...powerSnapshot.powerOffs,
+      ...powerSnapshot.unclassifiedStops,
+    ].filter((record) => record.isStop && record.time !== null);
+
+    stops.sort((left, right) => (right.time ?? 0) - (left.time ?? 0));
+    return stops[0] ?? null;
+  }, [powerSnapshot]);
+
+  /*
+   * The sampler ticks once per second, which crams 120 points into a 32px-tall
+   * chart. Chart the last point of each bucket instead, capped near 40 points.
+   */
+  const chartSamples = useMemo(() => {
+    const target = 40;
+
+    if (samples.length <= target) {
+      return samples;
+    }
+
+    const step = Math.ceil(samples.length / target);
+    const reduced = samples.filter((_, index) => index % step === 0);
+    const last = samples.at(-1);
+
+    if (last && reduced.at(-1) !== last) {
+      reduced.push(last);
+    }
+
+    return reduced;
+  }, [samples]);
+
   const cpuPoints = useMemo<ChartPoint[]>(
-    () =>
-      samples.map((sample) => ({
-        sampledAt: sample.sampledAt,
-        cpu: sample.cpu,
-      })),
-    [samples],
+    () => chartSamples.map((sample) => ({ sampledAt: sample.sampledAt, cpu: sample.cpu })),
+    [chartSamples],
   );
 
   const memoryPoints = useMemo<ChartPoint[]>(
     () =>
-      samples.map((sample) => ({
+      chartSamples.map((sample) => ({
         sampledAt: sample.sampledAt,
         memory: sample.memoryTotal > 0 ? (sample.memoryUsed / sample.memoryTotal) * 100 : 0,
       })),
-    [samples],
+    [chartSamples],
   );
 
   const networkPoints = useMemo<ChartPoint[]>(
     () =>
-      samples.map((sample) => ({
+      chartSamples.map((sample) => ({
         sampledAt: sample.sampledAt,
         download: sample.download,
         upload: sample.upload,
       })),
-    [samples],
+    [chartSamples],
   );
 
   const gpuPoints = useMemo<ChartPoint[]>(
     () =>
-      samples.map((sample) => ({
+      chartSamples.map((sample) => ({
         sampledAt: sample.sampledAt,
         usage: sample.gpus[0]?.usage ?? 0,
       })),
-    [samples],
+    [chartSamples],
   );
 
   const cpuSeries: ChartSeries[] = [
@@ -545,164 +524,122 @@ export function ResourceGraph({ onOpenThermals }: { onOpenThermals?: () => void 
     { key: "usage", label: "Usage", color: "var(--chart-1)", formatValue: formatPercent },
   ];
 
-  if (status === "error") {
+  if (status === "error" && samples.length === 0) {
     return (
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
-        <PageHeader uptime={null} status="error" />
-
-        <section className="bg-surface p-5">
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            The resource sampler did not start
-          </h2>
-          <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-            These counters come from the desktop app. Run it with{" "}
-            <span className="font-mono">npm run tauri dev</span>, not{" "}
-            <span className="font-mono">npm run dev</span>. The sampler also fails if the
-            window loses its local connection.
-          </p>
-          <p className="mt-3 bg-surface-muted px-3 py-2 font-mono text-[11px] leading-4 break-words text-muted-foreground">
-            {error ?? "Unknown error"}
-          </p>
-          <button
-            type="button"
-            onClick={retry}
-            className="mt-4 min-h-10 bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors duration-[120ms] ease-soft hover:bg-primary/90"
-          >
-            Try again
-          </button>
-        </section>
-      </div>
+      <Screen>
+        <StateView
+          title="Sampler unavailable"
+          code={error ?? "Unknown error"}
+          action={
+            <Button variant="primary" onClick={retry}>
+              Try again
+            </Button>
+          }
+        />
+      </Screen>
     );
   }
 
   if (status === "loading" && samples.length === 0) {
     return (
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
-        <PageHeader uptime={null} status={status} />
+      <Screen>
+        <StateView title="Starting sampler" />
+      </Screen>
+    );
+  }
 
-        <section className="bg-surface p-5">
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Starting the local sampler
-          </h2>
-          <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-            The first reading arrives in about a second. Nothing is drawn until a real sample
-            exists.
-          </p>
-        </section>
-      </div>
+  if (!latest) {
+    return (
+      <Screen>
+        <StateView title="No sample yet" />
+      </Screen>
     );
   }
 
   const memoryPercent =
-    latest && latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
+    latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
+  const gpu = latest.gpus[0] ?? null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
-      <PageHeader uptime={latest?.uptime ?? null} status={status} />
+    <Screen>
+      <Vitals latest={latest} thermal={thermalLatest} />
 
-      <ThermalSummary
-        sample={thermalLatest}
-        status={thermalStatus}
-        onOpen={onOpenThermals}
-      />
-
-      <ResourceChart
-        title={latest?.cpuBrand || "CPU"}
-        icon={<CpuIcon size={16} aria-hidden="true" />}
-        data={cpuPoints}
-        series={cpuSeries}
-        emptyMessage="Waiting for two samples before drawing the line."
-        ariaLabel={`CPU usage over the last ${samples.length} seconds`}
-        yDomain={[0, 100]}
-        yTickFormatter={formatPercent}
-        meter={{ value: latest?.cpu ?? 0 }}
-        renderTooltipFooter={(sampledAt) => {
-          const sample = sampleByTime.get(sampledAt);
-
-          return sample ? (
-            <TopProcessTooltipFooter
-              sample={sample}
-              title="Top CPU"
-              icon={CpuIcon}
-              metric="cpu"
-            />
-          ) : null;
-        }}
-      />
-
-      {latest?.gpus.length ? (
+      <div className="grid gap-4 md:grid-cols-2">
         <ResourceChart
-          title={latest.gpus[0].name}
-          icon={<GraphicsCardIcon size={16} aria-hidden="true" />}
-          data={gpuPoints}
-          series={gpuSeries}
-          emptyMessage="Waiting for two samples before drawing the line."
-          ariaLabel={`GPU utilization over the last ${samples.length} seconds`}
+          label="CPU"
+          icon={<CpuIcon size={13} />}
+          meta={latest.cpuBrand}
+          metaMono
+          value={formatPercent(latest.cpu)}
+          data={cpuPoints}
+          series={cpuSeries}
+          emptyMessage="Collecting samples"
+          ariaLabel={`CPU usage over the last ${samples.length} seconds`}
           yDomain={[0, 100]}
           yTickFormatter={formatPercent}
-          meter={
-            latest.gpus[0].usage === null
-              ? undefined
-              : { value: latest.gpus[0].usage }
-          }
           renderTooltipFooter={(sampledAt) => {
             const sample = sampleByTime.get(sampledAt);
-
-            return sample ? (
-              <TopProcessTooltipFooter
-                sample={sample}
-                title="Top GPU"
-                icon={GraphicsCardIcon}
-                metric="gpu"
-              />
-            ) : null;
+            return sample ? <TopProcessFooter sample={sample} metric="cpu" /> : null;
           }}
         />
-      ) : null}
 
-      <ResourceChart
-        title="Memory"
-        icon={<MemoryIcon size={16} aria-hidden="true" />}
-        data={memoryPoints}
-        series={memorySeries}
-        emptyMessage="Waiting for two samples before drawing the line."
-        ariaLabel={`Memory usage over the last ${samples.length} seconds`}
-        yDomain={[0, 100]}
-        yTickFormatter={formatPercent}
-        meter={{ value: memoryPercent }}
-        renderTooltipFooter={(sampledAt) => {
-          const sample = sampleByTime.get(sampledAt);
+        {gpu ? (
+          <ResourceChart
+            label="GPU"
+            icon={<GraphicsCardIcon size={13} />}
+            meta={gpu.name}
+            metaMono
+            value={gpu.usage === null ? "—" : formatPercent(gpu.usage)}
+            data={gpuPoints}
+            series={gpuSeries}
+            emptyMessage="Collecting samples"
+            ariaLabel={`GPU utilization over the last ${samples.length} seconds`}
+            yDomain={[0, 100]}
+            yTickFormatter={formatPercent}
+            renderTooltipFooter={(sampledAt) => {
+              const sample = sampleByTime.get(sampledAt);
+              return sample ? <TopProcessFooter sample={sample} metric="gpu" /> : null;
+            }}
+          />
+        ) : null}
 
-          return sample ? (
-            <TopProcessTooltipFooter
-              sample={sample}
-              title="Top memory"
-              icon={MemoryIcon}
-              metric="memory"
-            />
-          ) : null;
-        }}
-      />
+        <ResourceChart
+          label="Memory"
+          icon={<MemoryIcon size={13} />}
+          meta={`${formatBytes(latest.memoryUsed)} of ${formatBytes(latest.memoryTotal)}`}
+          value={formatPercent(memoryPercent)}
+          data={memoryPoints}
+          series={memorySeries}
+          emptyMessage="Collecting samples"
+          ariaLabel={`Memory usage over the last ${samples.length} seconds`}
+          yDomain={[0, 100]}
+          yTickFormatter={formatPercent}
+          renderTooltipFooter={(sampledAt) => {
+            const sample = sampleByTime.get(sampledAt);
+            return sample ? <TopProcessFooter sample={sample} metric="memory" /> : null;
+          }}
+        />
 
-      <ResourceChart
-        title={latest?.networkInterfaces.join(", ") || "Network throughput"}
-        icon={<ArrowsDownUpIcon size={16} aria-hidden="true" />}
-        data={networkPoints}
-        series={networkSeries}
-        emptyMessage="Waiting for two samples before drawing the line."
-        ariaLabel={`Network download and upload over the last ${samples.length} seconds`}
-        yDomain={[0, "auto"]}
-        yTickFormatter={(value) => formatBytes(value)}
-        renderTooltipFooter={(sampledAt) => {
-          const sample = sampleByTime.get(sampledAt);
+        <ResourceChart
+          className={gpu ? undefined : "md:col-span-2"}
+          label="Network"
+          icon={<PlugsConnectedIcon size={13} />}
+          meta={latest.networkInterfaces.join(", ") || "All adapters"}
+          value={formatRate(latest.download)}
+          data={networkPoints}
+          series={networkSeries}
+          emptyMessage="Collecting samples"
+          ariaLabel={`Network download and upload over the last ${samples.length} seconds`}
+          yDomain={[0, "auto"]}
+          yTickFormatter={(value) => formatBytes(value)}
+          renderTooltipFooter={(sampledAt) => {
+            const sample = sampleByTime.get(sampledAt);
+            return sample ? <NetworkFooter sample={sample} /> : null;
+          }}
+        />
+      </div>
 
-          return sample ? <NetworkTooltipFooter sample={sample} /> : null;
-        }}
-      />
-
-      <VolumeList disks={latest?.disks ?? []} />
-
-      <GpuList gpus={latest?.gpus ?? []} />
-    </div>
+      <StoragePanel disks={latest.disks} />
+    </Screen>
   );
 }

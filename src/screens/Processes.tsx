@@ -1,11 +1,244 @@
-import { useEffect, useMemo, useState } from "react";
-import { CaretDownIcon, CaretUpIcon, CpuIcon, FastForwardIcon, GraphicsCardIcon, MemoryIcon, RewindIcon, RowsIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CaretDownIcon,
+  CaretUpIcon,
+  SlidersHorizontalIcon,
+} from "@phosphor-icons/react";
 
+import { PageHeader, Screen } from "@/components/layout/Screen";
+import { Button } from "@/components/primitives/Button";
+import { Panel } from "@/components/primitives/Panel";
+import { StateView } from "@/components/primitives/StateView";
+import { StatusMark } from "@/components/primitives/StatusMark";
+import { Sparkline } from "@/components/Sparkline";
 import { useProcesses } from "@/hooks/useProcesses";
 import { useResourceStream } from "@/hooks/useResourceStream";
-import { Sparkline } from "@/components/Sparkline";
 import { formatBytes, formatPercent } from "@/lib/format";
-import { LEVEL_COLORS, processLevel } from "@/lib/processLevel";
+import { loadToneClass } from "@/lib/loadLevel";
+import { cn } from "@/lib/utils";
+
+type Band = "Low" | "Moderate" | "High" | "Critical";
+
+const BANDS: { id: Band; dot: string }[] = [
+  { id: "Low", dot: "bg-success" },
+  { id: "Moderate", dot: "bg-muted-foreground" },
+  { id: "High", dot: "bg-warning" },
+  { id: "Critical", dot: "bg-critical" },
+];
+
+const FIELD_CLASS =
+  "h-10 w-full rounded-control bg-surface-muted px-3 text-[12px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+
+const NUMBER_CLASS =
+  "h-10 w-full rounded-control bg-surface-muted px-2.5 font-mono text-[11px] tabular-nums text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+
+function processBand(value: number): Band {
+  if (value >= 80) {
+    return "Critical";
+  }
+  if (value >= 50) {
+    return "High";
+  }
+  if (value >= 20) {
+    return "Moderate";
+  }
+  return "Low";
+}
+
+function SortHeader({
+  label,
+  active,
+  direction,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  active: boolean;
+  direction: "asc" | "desc";
+  onClick: () => void;
+  align?: "left" | "right";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-10 items-center gap-1 text-[10px] font-medium transition-colors duration-[120ms] ease-soft",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        align === "right" && "flex-row-reverse",
+      )}
+    >
+      {label}
+      {active ? (
+        direction === "asc" ? (
+          <CaretUpIcon size={10} aria-hidden="true" />
+        ) : (
+          <CaretDownIcon size={10} aria-hidden="true" />
+        )
+      ) : null}
+    </button>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => {
+          const parsed = Number(event.target.value);
+          onChange(Number.isNaN(parsed) ? 0 : parsed);
+        }}
+        className={cn(NUMBER_CLASS, "mt-1")}
+      />
+    </label>
+  );
+}
+
+function LevelFilter({
+  legend,
+  selected,
+  counts,
+  onToggle,
+}: {
+  legend: string;
+  selected: string[];
+  counts: Record<Band, number>;
+  onToggle: (band: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-[10px] font-medium text-muted-foreground">{legend}</legend>
+      <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
+        {BANDS.map((band) => (
+          <label
+            key={band.id}
+            className="flex min-h-8 items-center gap-2 text-[11px] text-foreground"
+          >
+            <input
+              type="checkbox"
+              checked={selected.includes(band.id)}
+              onChange={() => onToggle(band.id)}
+              className="size-3.5 accent-primary"
+            />
+            <span aria-hidden="true" className={cn("size-1.5 rounded-full", band.dot)} />
+            <span className="flex-1">{band.id}</span>
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {counts[band.id]}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function FilterPanel({
+  id,
+  levelFilter,
+  onToggleLevel,
+  minCpu,
+  maxCpu,
+  onMinCpu,
+  onMaxCpu,
+  gpuLevelFilter,
+  onToggleGpuLevel,
+  minGpu,
+  maxGpu,
+  onMinGpu,
+  onMaxGpu,
+  gpuOnly,
+  onGpuOnly,
+  counts,
+  gpuCounts,
+  activeCount,
+  onReset,
+}: {
+  id: string;
+  levelFilter: string[];
+  onToggleLevel: (band: string) => void;
+  minCpu: number;
+  maxCpu: number;
+  onMinCpu: (value: number) => void;
+  onMaxCpu: (value: number) => void;
+  gpuLevelFilter: string[];
+  onToggleGpuLevel: (band: string) => void;
+  minGpu: number;
+  maxGpu: number;
+  onMinGpu: (value: number) => void;
+  onMaxGpu: (value: number) => void;
+  gpuOnly: boolean;
+  onGpuOnly: (value: boolean) => void;
+  counts: Record<Band, number>;
+  gpuCounts: Record<Band, number>;
+  activeCount: number;
+  onReset: () => void;
+}) {
+  return (
+    <div
+      id={id}
+      role="dialog"
+      aria-label="Filter processes"
+      className="pop-enter glass absolute top-full right-0 z-30 mt-2 max-h-[min(70vh,34rem)] w-[20rem] overflow-y-auto rounded-panel p-4"
+    >
+      <LevelFilter
+        legend="CPU level"
+        selected={levelFilter}
+        counts={counts}
+        onToggle={onToggleLevel}
+      />
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <NumberField label="Min CPU %" value={minCpu} onChange={onMinCpu} />
+        <NumberField label="Max CPU %" value={maxCpu} onChange={onMaxCpu} />
+      </div>
+
+      <div className="mt-4 border-t border-border-subtle pt-3">
+        <LevelFilter
+          legend="GPU level"
+          selected={gpuLevelFilter}
+          counts={gpuCounts}
+          onToggle={onToggleGpuLevel}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <NumberField label="Min GPU %" value={minGpu} onChange={onMinGpu} />
+        <NumberField label="Max GPU %" value={maxGpu} onChange={onMaxGpu} />
+      </div>
+
+      <label className="mt-3 flex min-h-8 items-center gap-2 text-[11px] text-foreground">
+        <input
+          type="checkbox"
+          checked={gpuOnly}
+          onChange={(event) => onGpuOnly(event.target.checked)}
+          className="size-3.5 accent-primary"
+        />
+        Has GPU usage
+      </label>
+
+      <Button
+        variant="ghost"
+        className="mt-3 w-full"
+        onClick={onReset}
+        disabled={activeCount === 0}
+      >
+        Reset filters
+      </Button>
+    </div>
+  );
+}
 
 export function Processes() {
   const { processes, processHistory, status, error, retry } = useProcesses();
@@ -13,10 +246,6 @@ export function Processes() {
   const latest = samples.at(-1) ?? null;
   const systemMemoryTotal = latest?.memoryTotal ?? 0;
 
-  const cpuUsage = latest?.cpu ?? 0;
-  const memoryUsage =
-    latest && latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
-  const gpuUsage = latest?.gpus[0]?.usage ?? 0;
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
@@ -30,9 +259,24 @@ export function Processes() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(0);
 
+  const filterRootRef = useRef<HTMLDivElement>(null);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     setPage(0);
-  }, [query, levelFilter, minCpu, maxCpu, gpuLevelFilter, minGpu, maxGpu, gpuOnly, sortKey, sortDir]);
+  }, [
+    query,
+    levelFilter,
+    minCpu,
+    maxCpu,
+    gpuLevelFilter,
+    minGpu,
+    maxGpu,
+    gpuOnly,
+    sortKey,
+    sortDir,
+  ]);
 
   useEffect(() => {
     if (!filterOpen) {
@@ -40,23 +284,35 @@ export function Processes() {
     }
 
     function handlePointerDown(event: MouseEvent) {
-      const target = event.target as Element | null;
-      if (!target?.closest("[data-filter-root]")) {
+      if (!filterRootRef.current?.contains(event.target as Node)) {
         setFilterOpen(false);
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setFilterOpen(false);
+        filterButtonRef.current?.focus();
+      }
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [filterOpen]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+
     return processes.filter((process) => {
       if (q && !process.name.toLowerCase().includes(q)) {
         return false;
       }
-      if (levelFilter.length > 0 && !levelFilter.includes(processLevel(process.cpu).label)) {
+      if (levelFilter.length > 0 && !levelFilter.includes(processBand(process.cpu))) {
         return false;
       }
       if (process.cpu < minCpu || process.cpu > maxCpu) {
@@ -66,7 +322,7 @@ export function Processes() {
         return false;
       }
       if (process.gpu !== null) {
-        if (gpuLevelFilter.length > 0 && !gpuLevelFilter.includes(processLevel(process.gpu).label)) {
+        if (gpuLevelFilter.length > 0 && !gpuLevelFilter.includes(processBand(process.gpu))) {
           return false;
         }
         if (process.gpu < minGpu || process.gpu > maxGpu) {
@@ -77,7 +333,17 @@ export function Processes() {
       }
       return true;
     });
-  }, [processes, query, levelFilter, minCpu, maxCpu, gpuOnly, gpuLevelFilter, minGpu, maxGpu]);
+  }, [
+    processes,
+    query,
+    levelFilter,
+    minCpu,
+    maxCpu,
+    gpuOnly,
+    gpuLevelFilter,
+    minGpu,
+    maxGpu,
+  ]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -112,6 +378,25 @@ export function Processes() {
     (maxGpu < 100 ? 1 : 0) +
     (gpuOnly ? 1 : 0);
 
+  const counts = useMemo<Record<Band, number>>(() => {
+    const next: Record<Band, number> = { Low: 0, Moderate: 0, High: 0, Critical: 0 };
+    for (const process of processes) {
+      next[processBand(process.cpu)] += 1;
+    }
+    return next;
+  }, [processes]);
+
+  const gpuCounts = useMemo<Record<Band, number>>(() => {
+    const next: Record<Band, number> = { Low: 0, Moderate: 0, High: 0, Critical: 0 };
+    for (const process of processes) {
+      if (process.gpu === null) {
+        continue;
+      }
+      next[processBand(process.gpu)] += 1;
+    }
+    return next;
+  }, [processes]);
+
   function toggleSort(key: "name" | "cpu" | "memory" | "gpu") {
     if (sortKey === key) {
       setSortDir((current) => (current === "asc" ? "desc" : "asc"));
@@ -121,467 +406,271 @@ export function Processes() {
     }
   }
 
-  if (status === "error") {
-    return (
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
- 
+  function toggleLevel(band: string) {
+    setLevelFilter((current) =>
+      current.includes(band) ? current.filter((item) => item !== band) : [...current, band],
+    );
+  }
 
-        <section className="bg-surface p-5">
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            The process sampler did not start
-          </h2>
-          <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-            Process data comes from the desktop app. Run it with{" "}
-            <span className="font-mono">npm run tauri dev</span>.
-          </p>
-          <p className="mt-3 bg-surface-muted px-3 py-2 font-mono text-[11px] leading-4 break-words text-muted-foreground">
-            {error ?? "Unknown error"}
-          </p>
-          <button
-            type="button"
-            onClick={retry}
-            className="mt-4 min-h-10 bg-primary px-4 text-xs font-medium text-primary-foreground transition-colors duration-[120ms] ease-soft hover:bg-primary/90"
-          >
-            Try again
-          </button>
-        </section>
-      </div>
+  function toggleGpuLevel(band: string) {
+    setGpuLevelFilter((current) =>
+      current.includes(band) ? current.filter((item) => item !== band) : [...current, band],
+    );
+  }
+
+  function resetFilters() {
+    setLevelFilter([]);
+    setMinCpu(0);
+    setMaxCpu(100);
+    setGpuLevelFilter([]);
+    setMinGpu(0);
+    setMaxGpu(100);
+    setGpuOnly(false);
+    setQuery("");
+  }
+
+  if (status === "error" && processes.length === 0) {
+    return (
+      <Screen>
+        <PageHeader title="Processes">
+          <StatusMark tone="critical">Unavailable</StatusMark>
+        </PageHeader>
+        <StateView
+          title="Process sampler unavailable"
+          code={error ?? "Unknown error"}
+          action={
+            <Button variant="primary" onClick={retry}>
+              Try again
+            </Button>
+          }
+        />
+      </Screen>
     );
   }
 
   if (status === "loading" && processes.length === 0) {
     return (
-      <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 py-8">
- 
-
-        <section className="bg-surface p-5">
-          <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-            Starting the process sampler
-          </h2>
-          <p className="mt-2 max-w-lg text-xs leading-5 text-muted-foreground">
-            The first process list arrives in a few seconds.
-          </p>
-        </section>
-      </div>
+      <Screen>
+        <PageHeader title="Processes">
+          <StatusMark tone="muted">Starting</StatusMark>
+        </PageHeader>
+        <StateView title="Starting process sampler" />
+      </Screen>
     );
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6 px-6 pb-8 pt-0">
+    <Screen>
+      <PageHeader title="Processes">
+        <StatusMark tone="success">Live</StatusMark>
+      </PageHeader>
 
+      <Panel>
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter by name"
+            aria-label="Filter processes by name"
+            className={cn(FIELD_CLASS, "min-w-[12rem] flex-1")}
+          />
 
-      <section className="p-5">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="glass-item flex size-10 shrink-0 items-center justify-center border border-primary text-primary">
-              <RowsIcon size={22} weight="fill" aria-hidden="true" />
-            </span>
-            <div>
-              <h2 className="text-lg leading-6 font-semibold tracking-[-0.01em] text-foreground">
-                Live Processes
-              </h2>
-              <p className="mt-1 font-mono text-[11px] leading-4 text-muted-foreground">
-                Live process list sampled from this machine.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter by name"
-              aria-label="Filter processes by name"
-              className="min-h-10 flex-1 border border-border bg-surface-muted px-3 text-xs text-foreground shadow-soft placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <div className="relative" data-filter-root>
-              <button
-                type="button"
-                onClick={() => setFilterOpen((current) => !current)}
-                aria-expanded={filterOpen}
-                className="flex min-h-10 items-center gap-1.5 border border-border bg-surface-muted px-3 text-xs font-medium text-foreground shadow-soft transition-colors duration-[120ms] ease-soft hover:bg-accent"
-              >
-                <SlidersHorizontalIcon size={14} aria-hidden="true" />
-                Filter
-              </button>
+          <div className="relative" ref={filterRootRef}>
+            <Button
+              ref={filterButtonRef}
+              variant="quiet"
+              aria-expanded={filterOpen}
+              aria-controls="process-filters"
+              onClick={() => {
+                setFilterOpen((current) => !current);
+                window.setTimeout(() => filterPanelRef.current?.querySelector("input")?.focus(), 0);
+              }}
+            >
+              <SlidersHorizontalIcon size={14} aria-hidden="true" />
+              Filter
               {activeFilterCount > 0 ? (
-                <span className="absolute -bottom-1 -right-1 flex size-4 items-center justify-center bg-primary text-[10px] font-medium text-primary-foreground">
+                <span className="font-mono text-[10px] tabular-nums text-primary">
                   {activeFilterCount}
                 </span>
               ) : null}
-              <div
-                className="absolute right-0 top-full z-20 mt-2 w-80 border border-border bg-surface-muted/50 p-4 shadow-float backdrop-blur-md transition-all duration-[180ms] ease-soft"
-                style={{
-                  opacity: filterOpen ? 1 : 0,
-                  transform: filterOpen ? "translateY(0)" : "translateY(-4px)",
-                  pointerEvents: filterOpen ? "auto" : "none",
-                }}
-              >
-                <p className="text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                  CPU level
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {["Low", "Moderate", "High", "Critical"].map((level) => {
-                    const selected = levelFilter.includes(level);
-                    return (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() =>
-                          setLevelFilter((current) =>
-                            selected ? current.filter((item) => item !== level) : [...current, level],
-                          )
-                        }
-                        className={
-                          selected
-                            ? "flex items-center gap-1.5 border border-primary bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
-                            : "flex items-center gap-1.5 border border-border bg-surface-muted px-2 py-1 text-xs font-medium text-foreground"
-                        }
-                      >
-                        <span className="size-2 shrink-0" style={{ backgroundColor: LEVEL_COLORS[level] }} />
-                        {level}
-                      </button>
-                    );
-                  })}
-                </div>
+            </Button>
 
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <label className="block text-xs text-foreground">
-                    Min CPU %
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={minCpu}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
-                        setMinCpu(Number.isNaN(parsed) ? 0 : parsed);
-                      }}
-                      className="mt-1 min-h-6 w-full border border-border bg-surface-muted px-2 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </label>
-                  <label className="block text-xs text-foreground">
-                    Max CPU %
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={maxCpu}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
-                        setMaxCpu(Number.isNaN(parsed) ? 100 : parsed);
-                      }}
-                      className="mt-1 min-h-6 w-full border border-border bg-surface-muted px-2 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </label>
-                </div>
-
-                <p className="mt-4 text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                  GPU level
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {["Low", "Moderate", "High", "Critical"].map((level) => {
-                    const selected = gpuLevelFilter.includes(level);
-                    return (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() =>
-                          setGpuLevelFilter((current) =>
-                            selected ? current.filter((item) => item !== level) : [...current, level],
-                          )
-                        }
-                        className={
-                          selected
-                            ? "flex items-center gap-1.5 border border-primary bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
-                            : "flex items-center gap-1.5 border border-border bg-surface-muted px-2 py-1 text-xs font-medium text-foreground"
-                        }
-                      >
-                        <span className="size-2 shrink-0" style={{ backgroundColor: LEVEL_COLORS[level] }} />
-                        {level}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <label className="block text-xs text-foreground">
-                    Min GPU %
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={minGpu}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
-                        setMinGpu(Number.isNaN(parsed) ? 0 : parsed);
-                      }}
-                      className="mt-1 min-h-6 w-full border border-border bg-surface-muted px-2 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </label>
-                  <label className="block text-xs text-foreground">
-                    Max GPU %
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={maxGpu}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
-                        setMaxGpu(Number.isNaN(parsed) ? 100 : parsed);
-                      }}
-                      className="mt-1 min-h-6 w-full border border-border bg-surface-muted px-2 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </label>
-                </div>
-
-                <label className="mt-3 flex items-center gap-1.5 text-xs text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={gpuOnly}
-                    onChange={(event) => setGpuOnly(event.target.checked)}
-                  />
-                  Has GPU usage
-                </label>
-
-                <p className="mt-4 text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                  Sort
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(["name", "cpu", "memory", "gpu"] as const).map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleSort(key)}
-                      className={
-                        sortKey === key
-                          ? "flex items-center gap-1.5 border border-primary bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
-                          : "flex items-center gap-1.5 border border-border bg-surface-muted px-2 py-1 text-xs font-medium text-foreground"
-                      }
-                    >
-                      {key === "name" ? "Name" : key === "cpu" ? "CPU" : key === "memory" ? "Memory" : "GPU"}
-                      {sortKey === key && (sortDir === "asc" ? <CaretUpIcon size={12} /> : <CaretDownIcon size={12} />)}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLevelFilter([]);
-                    setMinCpu(0);
-                    setMaxCpu(100);
-                    setGpuLevelFilter([]);
-                    setMinGpu(0);
-                    setMaxGpu(100);
-                    setGpuOnly(false);
-                    setQuery("");
-                  }}
-                  className="mt-4 min-h-8 w-full border border-border bg-surface-muted px-3 text-xs font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-accent"
-                >
-                  Clear filters
-                </button>
+            {filterOpen ? (
+              <div ref={filterPanelRef}>
+                <FilterPanel
+                  id="process-filters"
+                  levelFilter={levelFilter}
+                  onToggleLevel={toggleLevel}
+                  minCpu={minCpu}
+                  maxCpu={maxCpu}
+                  onMinCpu={setMinCpu}
+                  onMaxCpu={setMaxCpu}
+                  gpuLevelFilter={gpuLevelFilter}
+                  onToggleGpuLevel={toggleGpuLevel}
+                  minGpu={minGpu}
+                  maxGpu={maxGpu}
+                  onMinGpu={setMinGpu}
+                  onMaxGpu={setMaxGpu}
+                  gpuOnly={gpuOnly}
+                  onGpuOnly={setGpuOnly}
+                  counts={counts}
+                  gpuCounts={gpuCounts}
+                  activeCount={activeFilterCount}
+                  onReset={resetFilters}
+                />
               </div>
-            </div>
+            ) : null}
           </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          {[
-            { label: "CPU", value: cpuUsage, icon: CpuIcon },
-            { label: "Memory", value: memoryUsage, icon: MemoryIcon },
-            { label: "GPU", value: gpuUsage, icon: GraphicsCardIcon },
-          ].map((item) => {
-            const Icon = item.icon;
-            const color = processLevel(item.value).color;
-            return (
-              <div key={item.label} className="flex flex-col gap-1.5">
-                <div className="h-2 w-full border border-border bg-surface-muted">
-                  <div
-                    className="h-full transition-[width] duration-300 ease-soft"
-                    style={{ width: `${Math.min(item.value, 100)}%`, backgroundColor: color }}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                    <Icon size={12} aria-hidden="true" className="text-muted-foreground" />
-                    {item.label}
-                  </span>
-                  <span className="font-mono text-xs tabular-nums text-foreground">
-                    {formatPercent(item.value)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         {sorted.length === 0 ? (
-          <p className="mt-4 bg-surface-muted px-4 py-6 text-center text-xs text-muted-foreground">
-            No process matches that name.
-          </p>
+          <div className="border-t border-border-subtle px-4 py-10 text-center">
+            <p className="text-[12px] text-muted-foreground">
+              {processes.length === 0 ? "No processes reported." : "No process matches these filters."}
+            </p>
+            {processes.length > 0 ? (
+              <Button variant="ghost" className="mt-2" onClick={resetFilters}>
+                Reset filters
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <>
-            <div className="mt-4 overflow-x-auto border border-border shadow-soft">
-            <table className="w-full table-fixed text-xs shadow-soft">
-              <thead>
-                <tr className="text-left text-[11px] leading-4 font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                  <th className="px-3 py-2 font-medium bg-surface-muted">
-  <button type="button" onClick={() => toggleSort("name")} className="flex items-center gap-1.5">
-    <RowsIcon size={14} aria-hidden="true" /> Name
-    {sortKey === "name" && (sortDir === "asc" ? <CaretUpIcon size={12} /> : <CaretDownIcon size={12} />)}
-  </button>
-</th>
-                  <th className="w-36 py-2 pr-3 text-left font-medium bg-surface-muted">
-  <button type="button" onClick={() => toggleSort("cpu")} className="flex items-center gap-1.5">
-    <CpuIcon size={14} aria-hidden="true" /> CPU
-    {sortKey === "cpu" && (sortDir === "asc" ? <CaretUpIcon size={12} /> : <CaretDownIcon size={12} />)}
-  </button>
-</th>
-                  <th className="w-40 py-2 pr-3 text-left font-medium bg-surface-muted">
-  <button type="button" onClick={() => toggleSort("memory")} className="flex items-center gap-1.5">
-    <MemoryIcon size={14} aria-hidden="true" /> Memory
-    {sortKey === "memory" && (sortDir === "asc" ? <CaretUpIcon size={12} /> : <CaretDownIcon size={12} />)}
-  </button>
-</th>
-                  <th className="w-36 py-2 pr-3 text-left font-medium bg-surface-muted">
-  <button type="button" onClick={() => toggleSort("gpu")} className="flex items-center gap-1.5">
-    <GraphicsCardIcon size={14} aria-hidden="true" /> GPU
-    {sortKey === "gpu" && (sortDir === "asc" ? <CaretUpIcon size={12} /> : <CaretDownIcon size={12} />)}
-  </button>
-</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map((process) => {
-                  const level = processLevel(process.cpu);
-                  return (
-                  <tr key={process.pid} className="align-middle backdrop-blur-[2px]" style={{ boxShadow: `inset 4px 0 0 ${level.color}`, backgroundImage: `linear-gradient(to right, ${level.color}20, transparent)` }}>
-                    <td className="py-2 pl-3 pr-4">
-                      <div className="flex min-w-0 flex-col gap-1.5">
-                        <span className="truncate text-foreground">{process.name}</span>
-                        <span className="flex w-fit shrink-0 items-center gap-2">
-                          <span
-                            className="flex items-center gap-1.5 px-1.5 py-0.5 font-mono text-[10px] leading-4 tabular-nums"
-                            style={{ backgroundColor: `${level.color}20`, color: level.color }}
-                          >
-                            <span aria-hidden="true" className="size-2 shrink-0" style={{ backgroundColor: level.color }} />
-                            {process.pid}
-                          </span>
+            <div className="overflow-x-auto border-t border-border-subtle">
+              <table className="w-full min-w-[38rem] table-fixed">
+                <thead>
+                  <tr className="text-muted-foreground">
+                    <th scope="col" className="px-4 py-1 text-left">
+                      <SortHeader
+                        label="Process"
+                        active={sortKey === "name"}
+                        direction={sortDir}
+                        onClick={() => toggleSort("name")}
+                      />
+                    </th>
+                    <th scope="col" className="w-[13rem] px-3 py-1 text-right">
+                      <div className="flex justify-end">
+                        <SortHeader
+                          label="CPU"
+                          align="right"
+                          active={sortKey === "cpu"}
+                          direction={sortDir}
+                          onClick={() => toggleSort("cpu")}
+                        />
+                      </div>
+                    </th>
+                    <th scope="col" className="w-[9rem] px-3 py-1 text-right">
+                      <div className="flex justify-end">
+                        <SortHeader
+                          label="Memory"
+                          align="right"
+                          active={sortKey === "memory"}
+                          direction={sortDir}
+                          onClick={() => toggleSort("memory")}
+                        />
+                      </div>
+                    </th>
+                    <th scope="col" className="w-[6rem] px-4 py-1 text-right">
+                      <div className="flex justify-end">
+                        <SortHeader
+                          label="GPU"
+                          align="right"
+                          active={sortKey === "gpu"}
+                          direction={sortDir}
+                          onClick={() => toggleSort("gpu")}
+                        />
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((process) => {
+                    const history = processHistory[process.pid] ?? [];
 
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-2 pr-4">
-                      <div className="flex h-full items-start justify-start gap-2">
-                        <Sparkline
-                          values={(processHistory[process.pid] ?? []).map((point) => point.cpu)}
-                          color="var(--chart-1)"
-                          min={0}
-                          max={100}
-                        />
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-mono tabular-nums text-foreground">
-                            {formatPercent(process.cpu)}
-                          </span>
-                          {(() => {
-                            const level = processLevel(process.cpu);
-                            return (
-                              <span
-                                className="px-1.5 py-0.5 text-[9px] leading-3 font-medium uppercase"
-                                style={{ backgroundColor: `${level.color}20`, color: level.color }}
-                              >
-                                {level.label}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2 pr-4">
-                      <div className="flex h-full items-start justify-start gap-2">
-                        <Sparkline
-                          values={(processHistory[process.pid] ?? []).map((point) => point.memory)}
-                          color="var(--chart-2)"
-                        />
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-mono tabular-nums text-foreground">
+                    return (
+                      <tr
+                        key={process.pid}
+                        className="border-t border-border-subtle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted"
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex min-w-0 items-baseline gap-2">
+                            <span className="truncate text-[12px] text-foreground">
+                              {process.name}
+                            </span>
+                            <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                              {process.pid}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-3">
+                            <Sparkline
+                              className="hidden md:inline-block"
+                              values={history.map((point) => point.cpu)}
+                              color="var(--chart-1)"
+                              min={0}
+                              max={100}
+                            />
+                            <span
+                              className={cn(
+                                "w-12 text-right font-mono text-[11px] tabular-nums",
+                                loadToneClass(process.cpu),
+                              )}
+                            >
+                              {formatPercent(process.cpu)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <span className="font-mono text-[11px] tabular-nums text-foreground">
                             {formatBytes(process.memory)}
                           </span>
-                          {(() => {
-                            const memoryPercent =
-                              systemMemoryTotal > 0 ? (process.memory / systemMemoryTotal) * 100 : 0;
-                            const level = processLevel(memoryPercent);
-                            return (
-                              <span
-                                className="px-1.5 py-0.5 text-[9px] leading-3 font-medium uppercase"
-                                style={{ backgroundColor: `${level.color}20`, color: level.color }}
-                              >
-                                {level.label}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2">
-                      <div className="flex h-full items-start justify-start gap-2">
-                        <Sparkline
-                          values={(processHistory[process.pid] ?? []).map((point) =>
-                            point.gpu === null ? 0 : point.gpu,
-                          )}
-                          color="var(--chart-3)"
-                          min={0}
-                          max={100}
-                        />
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-mono tabular-nums text-foreground">
-                            {process.gpu === null ? "000%" : formatPercent(process.gpu)}
+                          {systemMemoryTotal > 0 ? (
+                            <span className="ml-1.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                              {formatPercent((process.memory / systemMemoryTotal) * 100)}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <span className="font-mono text-[11px] tabular-nums text-foreground">
+                            {process.gpu === null ? "—" : formatPercent(process.gpu)}
                           </span>
-                          {(() => {
-                            const level = processLevel(process.gpu === null ? 0 : process.gpu);
-                            return (
-                              <span
-                                className="px-1.5 py-0.5 text-[9px] leading-3 font-medium uppercase"
-                                style={{ backgroundColor: `${level.color}20`, color: level.color }}
-                              >
-                                {level.label}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {sorted.length > 0 ? (
-            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-              <button
-                type="button"
-                disabled={currentPage === 0}
-                onClick={() => setPage((current) => Math.max(0, current - 1))}
-                className="flex min-h-8 items-center gap-1.5 border border-border bg-surface-muted px-3 text-foreground transition-colors duration-[120ms] ease-soft hover:bg-accent disabled:opacity-40"
-              >
-                <RewindIcon size={14} aria-hidden="true" />
-                Prev
-              </button>
-              <span className="font-mono">
-                Page {currentPage + 1} of {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={currentPage >= totalPages - 1}
-                onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
-                className="flex min-h-8 items-center gap-1.5 border border-border bg-surface-muted px-3 text-foreground transition-colors duration-[120ms] ease-soft hover:bg-accent disabled:opacity-40"
-              >
-                Next
-                <FastForwardIcon size={14} aria-hidden="true" />
-              </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-1.5">
+              <span className="text-[11px] text-muted-foreground">
+                {sorted.length === 1 ? "1 process" : `${sorted.length} processes`}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  disabled={currentPage === 0}
+                  onClick={() => setPage((current) => Math.max(0, current - 1))}
+                >
+                  Previous
+                </Button>
+                <span className="px-2 font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {currentPage + 1} / {totalPages}
+                </span>
+                <Button
+                  variant="ghost"
+                  disabled={currentPage >= totalPages - 1}
+                  onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           </>
         )}
-      </section>
-    </div>
+      </Panel>
+    </Screen>
   );
 }

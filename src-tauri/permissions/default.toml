@@ -22,3 +22,8 @@ commands.allow = ["thermal_history"]
 identifier = "allow-recheck-thermals"
 description = "Allow re-detecting thermal sensors."
 commands.allow = ["recheck_thermals"]
+
+[[permission]]
+identifier = "allow-power-history"
+description = "Allow reading uptime and power events from the System log."
+commands.allow = ["power_history"]

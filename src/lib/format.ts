@@ -4,9 +4,9 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
-  hour: "numeric",
+  hour: "2-digit",
   minute: "2-digit",
-  second: "2-digit",
+  hourCycle: "h23",
 });
 
 export function formatDateTime(epochMs: number | null): string {
@@ -35,10 +35,13 @@ export function formatRate(value: number): string {
 
 export function formatPercent(value: number): string {
   if (!Number.isFinite(value)) {
-    return "000%";
+    return "—";
   }
 
-  return `${String(Math.round(value)).padStart(3, "0")}%`;
+  const rounded = Math.round(value);
+  const digits = Math.abs(rounded).toString().padStart(3, "0");
+
+  return rounded < 0 ? `-${digits}%` : `${digits}%`;
 }
 
 export function formatCelsius(value: number, digits = 0): string {
