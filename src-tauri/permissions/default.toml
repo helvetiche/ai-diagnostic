@@ -39,6 +39,66 @@ description = "Allow changing the active Windows power plan."
 commands.allow = ["set_power_plan"]
 
 [[permission]]
+identifier = "allow-get-display-brightness"
+description = "Allow reading display brightness."
+commands.allow = ["get_display_brightness"]
+
+[[permission]]
+identifier = "allow-set-display-brightness"
+description = "Allow changing display brightness."
+commands.allow = ["set_display_brightness"]
+
+[[permission]]
+identifier = "allow-get-game-mode"
+description = "Allow reading Game Mode."
+commands.allow = ["get_game_mode"]
+
+[[permission]]
+identifier = "allow-set-game-mode"
+description = "Allow changing Game Mode."
+commands.allow = ["set_game_mode"]
+
+[[permission]]
+identifier = "allow-get-hags"
+description = "Allow reading HAGS."
+commands.allow = ["get_hags"]
+
+[[permission]]
+identifier = "allow-set-hags"
+description = "Allow changing HAGS."
+commands.allow = ["set_hags"]
+
+[[permission]]
+identifier = "allow-get-windows-updates-paused"
+description = "Allow reading Windows Update pause state."
+commands.allow = ["get_windows_updates_paused"]
+
+[[permission]]
+identifier = "allow-set-windows-updates-paused"
+description = "Allow pausing or resuming Windows Updates."
+commands.allow = ["set_windows_updates_paused"]
+
+[[permission]]
+identifier = "allow-get-startup-apps"
+description = "Allow reading startup apps."
+commands.allow = ["get_startup_apps"]
+
+[[permission]]
+identifier = "allow-disable-startup-app"
+description = "Allow disabling a startup app."
+commands.allow = ["disable_startup_app"]
+
+[[permission]]
+identifier = "allow-enable-startup-app"
+description = "Allow enabling a startup app."
+commands.allow = ["enable_startup_app"]
+
+[[permission]]
+identifier = "allow-toggle-startup-file"
+description = "Allow toggling a startup shortcut."
+commands.allow = ["toggle_startup_file"]
+
+[[permission]]
 identifier = "allow-get-power-timeouts"
 description = "Allow reading Windows power timeouts."
 commands.allow = ["get_power_timeouts"]
@@ -57,3 +117,13 @@ commands.allow = ["get_fast_startup"]
 identifier = "allow-set-fast-startup"
 description = "Allow changing the Fast Startup state."
 commands.allow = ["set_fast_startup"]
+
+[[permission]]
+identifier = "allow-logs-snapshot"
+description = "Allow reading the system logs snapshot."
+commands.allow = ["logs_snapshot"]
+
+[[permission]]
+identifier = "allow-logs-bitlocker"
+description = "Allow reading BitLocker volume status."
+commands.allow = ["logs_bitlocker"]

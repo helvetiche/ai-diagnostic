@@ -10,10 +10,10 @@ type MeterTone =
   | "moderate"
   | "elevated"
   | "high"
-  | "peak";
+  | "peak"
+  | "blue";
 
 const SEGMENT_COUNT = 5;
-const SEGMENT_SPAN = 100 / SEGMENT_COUNT;
 
 const TONE_FILL: Record<MeterTone, string> = {
   primary: "bg-primary",
@@ -26,6 +26,7 @@ const TONE_FILL: Record<MeterTone, string> = {
   elevated: "bg-load-elevated",
   high: "bg-load-high",
   peak: "bg-load-peak",
+  blue: "bg-blue-700 dark:bg-blue-300",
 };
 
 function Meter({
@@ -33,19 +34,23 @@ function Meter({
   max = 100,
   tone = "neutral",
   label,
+  segments = SEGMENT_COUNT,
   className,
 }: {
   value: number | null;
   max?: number;
   tone?: MeterTone;
   label: string;
+  segments?: number;
   className?: string;
 }) {
+  const safeSegments = segments > 0 ? segments : SEGMENT_COUNT;
   const safeMax = max > 0 ? max : 100;
   const percent =
     value === null || !Number.isFinite(value)
       ? 0
       : Math.min(Math.max((value / safeMax) * 100, 0), 100);
+  const segmentSpan = 100 / safeSegments;
 
   return (
     <div
@@ -54,10 +59,11 @@ function Meter({
       aria-valuemin={0}
       aria-valuemax={Math.round(safeMax)}
       aria-valuenow={value === null || !Number.isFinite(value) ? undefined : Math.round(value)}
-      className={cn("grid w-full grid-cols-5 gap-1", className)}
+      className={cn("grid w-full gap-1", className)}
+      style={{ gridTemplateColumns: `repeat(${safeSegments}, minmax(0, 1fr))` }}
     >
-      {Array.from({ length: SEGMENT_COUNT }, (_, index) => {
-        const fill = Math.min(Math.max((percent - index * SEGMENT_SPAN) / SEGMENT_SPAN, 0), 1);
+      {Array.from({ length: safeSegments }, (_, index) => {
+        const fill = Math.min(Math.max((percent - index * segmentSpan) / segmentSpan, 0), 1);
 
         return (
           <div

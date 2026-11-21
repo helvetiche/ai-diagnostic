@@ -1,4 +1,5 @@
 mod configure;
+mod logs;
 mod network;
 mod power;
 mod resources;
@@ -22,6 +23,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             configure::list_power_plans,
             configure::set_power_plan,
+            configure::get_display_brightness,
+            configure::set_display_brightness,
+            configure::get_game_mode,
+            configure::set_game_mode,
+            configure::get_hags,
+            configure::set_hags,
+            configure::get_windows_updates_paused,
+            configure::set_windows_updates_paused,
+            configure::get_startup_apps,
+            configure::disable_startup_app,
+            configure::enable_startup_app,
+            configure::toggle_startup_file,
             configure::get_power_timeouts,
             configure::set_power_timeouts,
             configure::get_fast_startup,
@@ -29,6 +42,8 @@ pub fn run() {
             resources::resource_history,
             resources::get_processes,
             resources::set_resource_streaming,
+            logs::logs_bitlocker,
+            logs::logs_snapshot,
             power::power_history,
             thermal::thermal_history,
             thermal::recheck_thermals,

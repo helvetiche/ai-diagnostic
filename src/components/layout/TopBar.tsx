@@ -67,7 +67,7 @@ export function TopBar({
     <header className="glass-bar sticky top-0 z-30">
       <div className="mx-auto flex h-[40px] w-full max-w-[1080px] items-center gap-4 pl-0 pr-4 sm:gap-6 sm:pr-6">
         <nav aria-label="Primary" className="w-fit">
-          <ul className="grid h-[40px] w-fit grid-cols-4 divide-x divide-border border border-border">
+          <ul className="grid h-[40px] w-fit grid-cols-5 divide-x divide-border border border-border">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const current = active === item.id;

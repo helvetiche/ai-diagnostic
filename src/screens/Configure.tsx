@@ -1,17 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Screen, PageHeader } from "@/components/layout/Screen";
+import { ArrowsClockwiseIcon, BatteryLowIcon, GameControllerIcon, GraphicsCardIcon, LightningIcon, ListBulletsIcon, ProhibitIcon, RocketIcon, ScalesIcon, SunIcon } from "@phosphor-icons/react";
+import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/primitives/Button";
-import { Skeleton } from "@/components/primitives/Skeleton";
+import { Meter } from "@/components/primitives/Meter";
 import { StateView } from "@/components/primitives/StateView";
-import { StatusMark } from "@/components/primitives/StatusMark";
+import { invoke } from "@tauri-apps/api/core";
 import { usePowerPlans } from "@/hooks/usePowerPlans";
-import { usePowerSettings } from "@/hooks/usePowerSettings";
-import type { PowerTimeouts } from "@/types/configure";
+import type { StartupApp } from "@/types/configure";
 import { cn } from "@/lib/utils";
 
-const NUMBER_CLASS =
-  "h-10 w-full rounded-control bg-surface-muted px-2.5 font-mono text-[11px] tabular-nums text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+function planIcon(level: number) {
+  if (level === 0) {
+    return BatteryLowIcon;
+  }
+
+  if (level === 1) {
+    return ScalesIcon;
+  }
+
+  if (level === 3) {
+    return RocketIcon;
+  }
+
+  return LightningIcon;
+}
+
+function planLevel(name: string): number {
+  const value = name.toLowerCase();
+
+  if (value.includes("saver") || value.includes("battery") || value.includes("low")) {
+    return 0;
+  }
+
+  if (value.includes("balanced")) {
+    return 1;
+  }
+
+  if (value.includes("ultimate")) {
+    return 3;
+  }
+
+  if (value.includes("performance") || value.includes("high")) {
+    return 2;
+  }
+
+  return 2;
+}
 
 function ConfigureSkeleton() {
   return (
@@ -19,14 +54,7 @@ function ConfigureSkeleton() {
       <div aria-busy="true" className="grid gap-4 sm:grid-cols-2">
         {Array.from({ length: 4 }, (_, index) => (
           <div key={index} className="border border-border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-col gap-2">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-3 w-48" />
-              </div>
-              <Skeleton className="h-4 w-14" />
-            </div>
-            <Skeleton className="mt-4 h-10 w-28" />
+            <div className="h-4 w-28 bg-surface-muted" />
           </div>
         ))}
       </div>
@@ -37,18 +65,105 @@ function ConfigureSkeleton() {
 
 export function Configure() {
   const { plans, status, error, refresh, setActive, pendingGuid } = usePowerPlans();
-  const settings = usePowerSettings();
-  const [draft, setDraft] = useState<PowerTimeouts | null>(null);
 
   useEffect(() => {
     document.title = "Windog - Configure";
   }, []);
 
+  const [brightness, setBrightness] = useState<number | null>(null);
+  const [brightnessError, setBrightnessError] = useState<string | null>(null);
+  const [gameMode, setGameMode] = useState<boolean | null>(null);
+  const [hags, setHags] = useState<boolean | null>(null);
+  const [updatesPaused, setUpdatesPaused] = useState<boolean | null>(null);
+  const [startupApps, setStartupApps] = useState<StartupApp[]>([]);
+  const [startupError, setStartupError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (settings.timeouts) {
-      setDraft(settings.timeouts);
-    }
-  }, [settings.timeouts]);
+    let cancelled = false;
+
+    invoke<number | null>("get_display_brightness")
+      .then((value) => {
+        if (!cancelled) {
+          setBrightness(value);
+        }
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setBrightnessError(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    invoke<boolean | null>("get_game_mode")
+      .then((value) => {
+        if (!cancelled) {
+          setGameMode(value);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGameMode(null);
+        }
+      });
+
+    invoke<boolean | null>("get_hags")
+      .then((value) => {
+        if (!cancelled) {
+          setHags(value);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHags(null);
+        }
+      });
+
+    invoke<boolean>("get_windows_updates_paused")
+      .then((value) => {
+        if (!cancelled) {
+          setUpdatesPaused(value);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUpdatesPaused(null);
+        }
+      });
+
+    invoke<StartupApp[]>("get_startup_apps")
+      .then((value) => {
+        if (!cancelled) {
+          setStartupApps(value);
+          setStartupError(null);
+        }
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setStartupApps([]);
+          setStartupError(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sortedPlans = useMemo(() => {
+    return [...plans].sort((left, right) => {
+      const levelDifference = planLevel(left.name) - planLevel(right.name);
+      return levelDifference !== 0
+        ? levelDifference
+        : left.name.localeCompare(right.name);
+    });
+  }, [plans]);
 
   if (status === "loading" && plans.length === 0) {
     return <ConfigureSkeleton />;
@@ -80,209 +195,364 @@ export function Configure() {
 
   return (
     <Screen>
-      {error ? (
-        <div className="border border-critical bg-critical-soft p-4">
-          <p className="text-[12px] font-medium text-critical">The change failed</p>
-          <p className="mt-1 text-[11px] leading-4 text-critical">{error}</p>
-        </div>
-      ) : null}
-
-      <PageHeader title="Configure">
-        <StatusMark tone="muted">Windows power plans</StatusMark>
-      </PageHeader>
+      <h1 className="sr-only">Configure</h1>
 
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-[13px] font-medium text-foreground">Power plan</h2>
-          <span className="text-[11px] text-muted-foreground">Applies to this PC</span>
+          <p className="text-[12px] font-medium text-foreground">
+            {plans.find((plan) => plan.active)?.name ?? "No active plan"}
+          </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {plans.map((plan) => {
-            const busy = pendingGuid === plan.guid;
-
+        <div
+          role="radiogroup"
+          aria-label="Power plan"
+          className="grid divide-x divide-border border border-border"
+          style={{ gridTemplateColumns: `repeat(${Math.max(sortedPlans.length, 1)}, minmax(0, 1fr))` }}
+        >
+          {sortedPlans.map((plan, index) => {
             return (
-              <article
+              <button
                 key={plan.guid}
+                type="button"
+                role="radio"
+                aria-checked={plan.active}
+                onClick={() => {
+                  if (pendingGuid === null && !plan.active) {
+                    void setActive(plan.guid);
+                  }
+                }}
                 className={cn(
-                  "flex flex-col gap-4 border p-4",
-                  plan.active ? "border-primary bg-accent" : "border-border bg-surface",
+                  "relative flex min-h-12 flex-col items-start justify-center gap-1.5 px-3 text-[11px] font-medium transition-colors duration-[120ms] ease-soft",
+                  plan.active
+                    ? cn(
+                        "backdrop-blur-md",
+                        planLevel(plan.name) === 0
+                          ? "bg-gradient-to-bl from-success/20 to-success/5 text-success"
+                          : planLevel(plan.name) === 1
+                            ? "bg-gradient-to-bl from-blue-700/20 to-blue-700/5 text-blue-700 dark:from-blue-300/20 dark:to-blue-300/5 dark:text-blue-300"
+                            : planLevel(plan.name) === 2
+                              ? "bg-gradient-to-bl from-warning/20 to-warning/5 text-warning"
+                              : "bg-gradient-to-bl from-critical/20 to-critical/5 text-critical",
+                      )
+                    : "bg-surface text-muted-foreground hover:bg-surface-muted hover:text-foreground",
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-[13px] font-medium text-foreground">{plan.name}</h3>
-                    <p className="mt-1 font-mono text-[10px] tabular-nums text-muted-foreground">
-                      {plan.guid}
-                    </p>
-                  </div>
-                  {plan.active ? (
-                    <StatusMark tone="success" labelTone>
-                      Active
-                    </StatusMark>
-                  ) : null}
-                </div>
-
-                <Button
-                  variant={plan.active ? "quiet" : "primary"}
-                  size="md"
-                  disabled={plan.active || pendingGuid !== null}
-                  onClick={() => void setActive(plan.guid)}
-                >
-                  {busy ? "Applying" : plan.active ? "Active" : "Set active"}
-                </Button>
-              </article>
+                <span className="flex items-center gap-1.5">
+                  {(() => {
+                    const Icon = planIcon(planLevel(plan.name));
+                    return (
+                      <Icon
+                        size={12}
+                        weight={plan.active ? "fill" : "regular"}
+                        aria-hidden="true"
+                      />
+                    );
+                  })()}
+                  {plan.name}
+                </span>
+                <Meter
+                  value={((index + 1) / Math.max(sortedPlans.length, 1)) * 100}
+                  tone={
+                    planLevel(plan.name) === 0
+                      ? "success"
+                      : planLevel(plan.name) === 1
+                        ? "blue"
+                        : planLevel(plan.name) === 2
+                          ? "warning"
+                          : "critical"
+                  }
+                  segments={Math.max(sortedPlans.length, 1)}
+                  label={`${plan.name} performance`}
+                  className="w-full"
+                />
+              </button>
             );
           })}
         </div>
       </section>
 
       <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-[13px] font-medium text-foreground">Power timeouts</h2>
-          <span className="text-[11px] text-muted-foreground">Minutes. 0 means never.</span>
+        <div className="flex items-center gap-2">
+          <SunIcon size={14} aria-hidden="true" />
+          <h2 className="text-[13px] font-medium text-foreground">Display brightness</h2>
         </div>
 
-        {settings.status === "loading" && !settings.timeouts ? (
-          <div aria-busy="true" className="border border-border p-4">
-            <Skeleton className="h-4 w-40" />
-          </div>
-        ) : settings.status === "error" && !settings.timeouts ? (
-          <div className="border border-critical bg-critical-soft p-4">
-            <p className="text-[12px] font-medium text-critical">Timeouts unavailable</p>
-            <p className="mt-1 text-[11px] leading-4 text-critical">
-              {settings.error ?? "Unknown error"}
-            </p>
-          </div>
-        ) : draft ? (
-          <div className="border border-border p-4">
-            {settings.error ? (
-              <p className="mb-3 text-[11px] leading-4 text-critical">{settings.error}</p>
-            ) : null}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {(
-                [
-                  ["Display off", "monitorAc", "monitorDc"],
-                  ["Disk off", "diskAc", "diskDc"],
-                  ["Sleep", "standbyAc", "standbyDc"],
-                  ["Hibernate", "hibernateAc", "hibernateDc"],
-                ] as const
-              ).map(([label, acKey, dcKey]) => (
-                <div key={label} className="flex flex-col gap-2">
-                  <p className="text-[11px] font-medium text-foreground">{label}</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="block">
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        Plugged in
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10_000}
-                        value={draft[acKey as keyof PowerTimeouts]}
-                        onChange={(event) => {
-                          const parsed = Number(event.target.value);
-                          setDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  [acKey]: Number.isNaN(parsed) ? 0 : parsed,
-                                }
-                              : current,
-                          );
-                        }}
-                        className={cn(NUMBER_CLASS, "mt-1")}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        On battery
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10_000}
-                        value={draft[dcKey as keyof PowerTimeouts]}
-                        onChange={(event) => {
-                          const parsed = Number(event.target.value);
-                          setDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  [dcKey]: Number.isNaN(parsed) ? 0 : parsed,
-                                }
-                              : current,
-                          );
-                        }}
-                        className={cn(NUMBER_CLASS, "mt-1")}
-                      />
-                    </label>
-                  </div>
-                </div>
-              ))}
+        {brightnessError ? (
+          <p className="text-[11px] leading-4 text-critical">{brightnessError}</p>
+        ) : (
+          <div
+            className={cn(
+              "border border-border p-4",
+              brightness === null && "opacity-45",
+            )}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="flex items-center gap-2 text-[12px] font-medium text-foreground">
+                {brightness === null ? (
+                  <>
+                    <ProhibitIcon size={12} aria-hidden="true" />
+                    Brightness Settings Unavailable
+                  </>
+                ) : (
+                  `${brightness}%`
+                )}
+              </span>
             </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={brightness ?? 50}
+              disabled={brightness === null}
+              onChange={(event) => {
+                if (brightness === null) {
+                  return;
+                }
 
-            <div className="mt-4 flex items-center gap-3">
-              <Button
-                variant="primary"
-                disabled={settings.savingTimeouts || !draft}
-                onClick={() => {
-                  if (draft) {
-                    void settings.saveTimeouts(draft);
-                  }
-                }}
-              >
-                {settings.savingTimeouts ? "Applying" : "Apply timeouts"}
-              </Button>
-              <Button
-                variant="quiet"
-                disabled={settings.savingTimeouts || !settings.timeouts}
-                onClick={() => {
-                  if (settings.timeouts) {
-                    setDraft(settings.timeouts);
-                  }
-                }}
-              >
-                Reset
-              </Button>
-            </div>
+                const value = Number(event.target.value);
+                setBrightness(value);
+                void invoke("set_display_brightness", { value });
+              }}
+              className="mt-3 h-2 w-full cursor-pointer appearance-none bg-surface-muted accent-primary disabled:cursor-not-allowed disabled:opacity-45"
+              aria-label="Display brightness"
+            />
           </div>
-        ) : null}
+        )}
       </section>
 
       <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-[13px] font-medium text-foreground">Fast Startup</h2>
-          <span className="text-[11px] text-muted-foreground">Hybrid shutdown</span>
+        <div className="flex items-center gap-2">
+          <GameControllerIcon size={14} aria-hidden="true" />
+          <h2 className="text-[13px] font-medium text-foreground">Performance</h2>
+        </div>
+
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-border p-4">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium text-foreground">Game Mode</p>
+              <p className="mt-1 max-w-xl text-[11px] leading-4 text-muted-foreground">
+                Optimizes the system for gaming.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={gameMode === true}
+              disabled={gameMode === null}
+              onClick={() => {
+                if (gameMode !== null) {
+                  const next = !gameMode;
+                  setGameMode(next);
+                  void invoke("set_game_mode", { enabled: next });
+                }
+              }}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 items-center border border-border transition-colors duration-[120ms] ease-soft disabled:cursor-not-allowed disabled:opacity-45",
+                gameMode ? "bg-primary" : "bg-surface-muted",
+              )}
+            >
+              <span
+                className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-medium text-primary-foreground/80"
+              >
+                {gameMode ? "ON" : ""}
+              </span>
+              <span
+                className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-medium text-muted-foreground"
+              >
+                {gameMode ? "" : "OFF"}
+              </span>
+              <span
+                className={cn(
+                  "inline-block h-4 w-4 bg-primary-foreground transition-transform duration-[120ms] ease-soft",
+                  gameMode ? "translate-x-6" : "translate-x-1",
+                )}
+              />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-border p-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <GraphicsCardIcon size={12} aria-hidden="true" />
+                <p className="text-[12px] font-medium text-foreground">
+                  Hardware-accelerated GPU scheduling
+                </p>
+              </div>
+              <p className="mt-1 max-w-xl text-[11px] leading-4 text-muted-foreground">
+                May reduce latency. Requires a restart to apply.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hags === true}
+              disabled={hags === null}
+              onClick={() => {
+                if (hags !== null) {
+                  const next = !hags;
+                  setHags(next);
+                  void invoke("set_hags", { enabled: next });
+                }
+              }}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 items-center border border-border transition-colors duration-[120ms] ease-soft disabled:cursor-not-allowed disabled:opacity-45",
+                hags ? "bg-primary" : "bg-surface-muted",
+              )}
+            >
+              <span
+                className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-medium text-primary-foreground/80"
+              >
+                {hags ? "ON" : ""}
+              </span>
+              <span
+                className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-medium text-muted-foreground"
+              >
+                {hags ? "" : "OFF"}
+              </span>
+              <span
+                className={cn(
+                  "inline-block h-4 w-4 bg-primary-foreground transition-transform duration-[120ms] ease-soft",
+                  hags ? "translate-x-6" : "translate-x-1",
+                )}
+              />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <ArrowsClockwiseIcon size={14} aria-hidden="true" />
+          <h2 className="text-[13px] font-medium text-foreground">Windows Update</h2>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border border-border p-4">
           <div className="min-w-0">
             <p className="text-[12px] font-medium text-foreground">
-              {settings.fastStartup === null ? "Unknown" : settings.fastStartup ? "On" : "Off"}
+              {updatesPaused === null ? "Unknown" : updatesPaused ? "Paused" : "Active"}
             </p>
             <p className="mt-1 max-w-xl text-[11px] leading-4 text-muted-foreground">
-              Fast Startup saves kernel state on shutdown. It can make dual-boot and some driver
-              issues harder to clear.
+              Pauses updates for 35 days.
             </p>
           </div>
-          <Button
-            variant={settings.fastStartup ? "danger" : "primary"}
-            disabled={settings.savingFastStartup || settings.fastStartup === null}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={updatesPaused === true}
+            disabled={updatesPaused === null}
             onClick={() => {
-              if (settings.fastStartup !== null) {
-                void settings.setFastStartup(!settings.fastStartup);
+              if (updatesPaused !== null) {
+                const next = !updatesPaused;
+                setUpdatesPaused(next);
+                void invoke("set_windows_updates_paused", { paused: next });
               }
             }}
+            className={cn(
+              "relative inline-flex h-6 w-11 shrink-0 items-center border border-border transition-colors duration-[120ms] ease-soft disabled:cursor-not-allowed disabled:opacity-45",
+              updatesPaused ? "bg-critical" : "bg-surface-muted",
+            )}
           >
-            {settings.savingFastStartup
-              ? "Applying"
-              : settings.fastStartup
-                ? "Turn off"
-                : "Turn on"}
-          </Button>
+            <span
+              className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-medium text-primary-foreground/80"
+            >
+              {updatesPaused ? "ON" : ""}
+            </span>
+            <span
+              className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-medium text-muted-foreground"
+            >
+              {updatesPaused ? "" : "OFF"}
+            </span>
+            <span
+              className={cn(
+                "inline-block h-4 w-4 bg-primary-foreground transition-transform duration-[120ms] ease-soft",
+                updatesPaused ? "translate-x-6" : "translate-x-1",
+              )}
+            />
+          </button>
         </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <ListBulletsIcon size={14} aria-hidden="true" />
+          <h2 className="text-[13px] font-medium text-foreground">Startup apps</h2>
+        </div>
+
+        {startupError ? (
+          <p className="text-[11px] leading-4 text-critical">{startupError}</p>
+        ) : startupApps.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">No startup entries found.</p>
+        ) : (
+          <div className="border border-border">
+            {startupApps.map((app) => (
+              <div
+                key={`${app.scope}-${app.name}`}
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3 last:border-b-0"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  {app.icon ? (
+                    <img
+                      src={`data:image/png;base64,${app.icon}`}
+                      alt=""
+                      className="size-5 shrink-0"
+                    />
+                  ) : null}
+                  <p className="truncate font-mono text-[12px] text-foreground">
+                    {app.displayName || app.name}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={app.enabled}
+                  onClick={() => {
+                    const next = !app.enabled;
+                    setStartupApps((current) =>
+                      current.map((item) =>
+                        item.scope === app.scope && item.name === app.name
+                          ? { ...item, enabled: next }
+                          : item,
+                      ),
+                    );
+
+                    if (app.kind === "registry") {
+                      if (next) {
+                        void invoke("enable_startup_app", {
+                          scope: app.scope,
+                          name: app.name,
+                          command: app.command,
+                        });
+                      } else {
+                        void invoke("disable_startup_app", {
+                          scope: app.scope,
+                          name: app.name,
+                        });
+                      }
+                    } else {
+                      void invoke("toggle_startup_file", {
+                        path: app.path,
+                        enabled: next,
+                      });
+                    }
+                  }}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 shrink-0 items-center border border-border transition-colors duration-[120ms] ease-soft",
+                    app.enabled ? "bg-primary" : "bg-surface-muted",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 bg-primary-foreground transition-transform duration-[120ms] ease-soft",
+                      app.enabled ? "translate-x-6" : "translate-x-1",
+                    )}
+                  />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </Screen>
   );

@@ -13,9 +13,23 @@
     "allow-power-history",
     "allow-list-power-plans",
     "allow-set-power-plan",
+    "allow-get-display-brightness",
+    "allow-set-display-brightness",
+    "allow-get-game-mode",
+    "allow-set-game-mode",
+    "allow-get-hags",
+    "allow-set-hags",
+    "allow-get-windows-updates-paused",
+    "allow-set-windows-updates-paused",
+    "allow-get-startup-apps",
+    "allow-disable-startup-app",
+    "allow-enable-startup-app",
+    "allow-toggle-startup-file",
     "allow-get-power-timeouts",
     "allow-set-power-timeouts",
     "allow-get-fast-startup",
-    "allow-set-fast-startup"
+    "allow-set-fast-startup",
+    "allow-logs-snapshot",
+    "allow-logs-bitlocker"
   ]
 }

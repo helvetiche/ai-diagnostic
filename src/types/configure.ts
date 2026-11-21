@@ -14,3 +14,14 @@ export type PowerTimeouts = {
   hibernateAc: number;
   hibernateDc: number;
 };
+
+export type StartupApp = {
+  name: string;
+  displayName: string;
+  icon: string | null;
+  scope: string;
+  enabled: boolean;
+  command: string;
+  kind: string;
+  path: string;
+};

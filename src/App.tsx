@@ -4,6 +4,7 @@ import { TopBar } from "./components/layout/TopBar";
 import { useSamplerStreaming } from "./hooks/useSamplerStreaming";
 import type { ScreenId } from "./lib/navigation";
 import { Configure } from "./screens/Configure";
+import { Logs } from "./screens/Logs";
 import { Power } from "./screens/Power";
 import { Processes } from "./screens/Processes";
 import { ResourceGraph } from "./screens/ResourceGraph";
@@ -36,6 +37,8 @@ function App() {
             <Power />
           ) : screen === "processes" ? (
             <Processes />
+          ) : screen === "logs" ? (
+            <Logs />
           ) : (
             <Configure />
           )}
