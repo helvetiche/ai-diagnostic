@@ -27,3 +27,33 @@ commands.allow = ["recheck_thermals"]
 identifier = "allow-power-history"
 description = "Allow reading uptime and power events from the System log."
 commands.allow = ["power_history"]
+
+[[permission]]
+identifier = "allow-list-power-plans"
+description = "Allow reading the installed Windows power plans."
+commands.allow = ["list_power_plans"]
+
+[[permission]]
+identifier = "allow-set-power-plan"
+description = "Allow changing the active Windows power plan."
+commands.allow = ["set_power_plan"]
+
+[[permission]]
+identifier = "allow-get-power-timeouts"
+description = "Allow reading Windows power timeouts."
+commands.allow = ["get_power_timeouts"]
+
+[[permission]]
+identifier = "allow-set-power-timeouts"
+description = "Allow changing Windows power timeouts."
+commands.allow = ["set_power_timeouts"]
+
+[[permission]]
+identifier = "allow-get-fast-startup"
+description = "Allow reading the Fast Startup state."
+commands.allow = ["get_fast_startup"]
+
+[[permission]]
+identifier = "allow-set-fast-startup"
+description = "Allow changing the Fast Startup state."
+commands.allow = ["set_fast_startup"]

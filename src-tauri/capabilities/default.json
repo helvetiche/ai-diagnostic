@@ -10,6 +10,12 @@
     "allow-set-resource-streaming",
     "allow-thermal-history",
     "allow-recheck-thermals",
-    "allow-power-history"
+    "allow-power-history",
+    "allow-list-power-plans",
+    "allow-set-power-plan",
+    "allow-get-power-timeouts",
+    "allow-set-power-timeouts",
+    "allow-get-fast-startup",
+    "allow-set-fast-startup"
   ]
 }

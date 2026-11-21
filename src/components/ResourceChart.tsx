@@ -103,12 +103,7 @@ export function ResourceChart({
   );
 
   return (
-    <figure
-      className={cn(
-        "border border-border-subtle p-4",
-        className,
-      )}
-    >
+    <figure className={cn("border border-border-subtle p-4", className)}>
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <figcaption
@@ -193,11 +188,7 @@ export function ResourceChart({
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid
-                vertical
-                stroke="var(--border-subtle)"
-                strokeDasharray="3 4"
-              />
+              <CartesianGrid vertical stroke="var(--border-subtle)" strokeDasharray="3 4" />
               <XAxis
                 dataKey="sampledAt"
                 type="number"

@@ -11,9 +11,7 @@ export function Panel({
     <section
       className={cn(
         "rounded-panel",
-        tone === "glass"
-          ? "glass-panel"
-          : "border border-border-subtle bg-surface shadow-card",
+        tone === "glass" ? "glass-panel" : "border border-border-subtle bg-surface shadow-card",
         className,
       )}
       {...props}

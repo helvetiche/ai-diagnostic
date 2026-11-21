@@ -1,66 +1,56 @@
-import { ArrowClockwiseIcon, CheckCircleIcon, ClockIcon, MoonIcon, PulseIcon, WarningIcon, XCircleIcon } from "@phosphor-icons/react";
-import { Fragment, useMemo, useState, type KeyboardEvent } from "react";
+import {
+  ArrowClockwiseIcon,
+  CaretDoubleLeftIcon,
+  CaretDoubleRightIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  ListBulletsIcon,
+  LightningIcon,
+  MoonIcon,
+  PowerIcon,
+  PulseIcon,
+} from "@phosphor-icons/react";
+import { Fragment, useEffect, useState, type KeyboardEvent } from "react";
 import { Screen } from "@/components/layout/Screen";
+import { Button } from "@/components/primitives/Button";
 import { Meter } from "@/components/primitives/Meter";
 import { Panel } from "@/components/primitives/Panel";
-import { Reading } from "@/components/primitives/Reading";
+
+import { Skeleton } from "@/components/primitives/Skeleton";
 import { StateView } from "@/components/primitives/StateView";
 import { StatusMark, type MarkTone } from "@/components/primitives/StatusMark";
-import { usePowerHistory, type PowerHistoryStatus } from "@/hooks/usePowerHistory";
-import { formatBytes, formatDateTime, formatUptime } from "@/lib/format";
+import { usePowerHistory } from "@/hooks/usePowerHistory";
+import { formatDateTime, formatUptime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { PowerLogInfo, PowerRecord, PowerSnapshot } from "@/types/power";
+import type { PowerRecord } from "@/types/power";
 
-const TAB_KEYS = ["shutdowns", "restarts", "power-offs"] as const;
+const TAB_KEYS = ["summary", "shutdowns", "restarts", "power-offs"] as const;
 
 type TabKey = (typeof TAB_KEYS)[number];
 
 const TAB_LABELS: Record<TabKey, string> = {
+  summary: "Summary",
   shutdowns: "Shutdowns",
   restarts: "Restarts",
   "power-offs": "Power offs",
 };
 
-const TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-function formatTime(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "—";
-  }
-
-  return TIME_FORMAT.format(new Date(value));
-}
+const TAB_ICONS: Record<TabKey, typeof ListBulletsIcon> = {
+  summary: ListBulletsIcon,
+  shutdowns: PowerIcon,
+  restarts: ArrowClockwiseIcon,
+  "power-offs": LightningIcon,
+};
 
 function Timestamp({ value, className }: { value: number | null; className?: string }) {
   return (
-    <time dateTime={value === null ? undefined : new Date(value).toISOString()} className={className}>
+    <time
+      dateTime={value === null ? undefined : new Date(value).toISOString()}
+      className={className}
+    >
       {formatDateTime(value)}
     </time>
   );
-}
-
-function HistoryStatus({
-  status,
-  capturedAt,
-}: {
-  status: PowerHistoryStatus;
-  capturedAt?: number;
-}) {
-  if (status === "error") {
-    return <StatusMark tone="critical">Unavailable</StatusMark>;
-  }
-
-  if (status === "loading") {
-    return (
-      <StatusMark tone="muted">{capturedAt === undefined ? "Reading the log" : "Refreshing"}</StatusMark>
-    );
-  }
-
-  return <StatusMark tone="success">Read at {formatTime(capturedAt ?? null)}</StatusMark>;
 }
 
 function ErrorBanner({
@@ -82,108 +72,6 @@ function ErrorBanner({
         </Button>
       ) : null}
     </Panel>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[11px] font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1 font-mono text-[12px] tabular-nums text-foreground">{value}</dd>
-    </div>
-  );
-}
-
-function UptimePanel({
-  snapshot,
-  lastStop,
-}: {
-  snapshot: PowerSnapshot;
-  lastStop: PowerRecord | null;
-}) {
-  return (
-    <section className="border border-border p-5">
-      <Reading
-        label="Uptime"
-        value={snapshot.uptimeSeconds === null ? "—" : formatUptime(snapshot.uptimeSeconds)}
-        size="hero"
-      />
-
-      <dl className="mt-5 grid gap-4 border-t border-border-subtle pt-4 sm:grid-cols-3">
-        <Metric
-          label="Active time"
-          value={snapshot.activeSeconds === null ? "—" : formatUptime(snapshot.activeSeconds)}
-        />
-        <Metric
-          label="Sleep time"
-          value={snapshot.sleepSeconds === null ? "—" : formatUptime(snapshot.sleepSeconds)}
-        />
-        <Metric label="Boot time" value={formatDateTime(snapshot.bootTime)} />
-      </dl>
-
-      <div className="mt-5 grid gap-4 border-t border-border-subtle pt-4 sm:grid-cols-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium text-muted-foreground">Last recorded stop</p>
-          {lastStop ? (
-            <>
-              <p className="mt-1 text-[12px] font-medium text-foreground">{lastStop.headline}</p>
-              <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {formatDateTime(lastStop.time)}
-              </p>
-            </>
-          ) : (
-            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              No stop events in the retained log.
-            </p>
-          )}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium text-muted-foreground">Fast Startup</p>
-          <p className="mt-1 text-[12px] font-medium text-foreground">
-            {snapshot.fastStartup === null ? "Unknown" : snapshot.fastStartup ? "On" : "Off"}
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CoverageNotice({
-  log,
-  truncated,
-}: {
-  log: PowerLogInfo | null;
-  truncated: boolean;
-}) {
-  if (!log) {
-    return (
-      <p className="px-1 text-[11px] leading-4 text-muted-foreground">Log details unavailable.</p>
-    );
-  }
-
-  const missingEarlierRecords = log.oldestRecord > 1;
-
-  return (
-    <div className="px-1">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-        <span>
-          System log · {log.recordCount.toLocaleString("en-US")} records ·{" "}
-          {formatBytes(log.fileBytes)}
-        </span>
-        <span>
-          Oldest <Timestamp value={log.oldestTime} className="font-mono text-foreground" />
-        </span>
-      </div>
-      {missingEarlierRecords ? (
-        <p className="mt-1.5 text-[11px] leading-4 text-warning">
-          {log.full ? "The log is full. Oldest records are overwritten." : "Earlier records are missing."}
-        </p>
-      ) : null}
-      {truncated ? (
-        <p className="mt-1 text-[11px] leading-4 text-muted-foreground">Newest 500 events shown.</p>
-      ) : null}
-    </div>
   );
 }
 
@@ -327,12 +215,27 @@ function RecordTable({
   label,
   records,
   emptyTitle,
+  pageSize,
 }: {
   label: string;
   records: PowerRecord[];
   emptyTitle: string;
+  pageSize?: number;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    setPage(0);
+  }, [records]);
+
+  const pageSizeValue = pageSize && pageSize > 0 ? pageSize : records.length;
+  const totalPages = Math.max(1, Math.ceil(records.length / pageSizeValue));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRecords = records.slice(
+    safePage * pageSizeValue,
+    safePage * pageSizeValue + pageSizeValue,
+  );
 
   if (records.length === 0) {
     return <EmptyState title={emptyTitle} />;
@@ -359,7 +262,7 @@ function RecordTable({
           </tr>
         </thead>
         <tbody>
-          {records.map((record) => {
+          {pageRecords.map((record) => {
             const expanded = expandedId === record.id;
             const qualifier = timeQualifier(record);
             const detailId = `power-record-detail-${record.id}`;
@@ -422,30 +325,91 @@ function RecordTable({
           })}
         </tbody>
       </table>
+      {pageSize && totalPages > 1 ? (
+        <div className="flex items-center justify-between gap-3 border-t border-border-subtle px-4 py-2 text-[11px] text-muted-foreground">
+          <span>
+            Page {safePage + 1} of {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 px-2 py-1 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:text-muted-foreground disabled:cursor-not-allowed disabled:text-muted-foreground"
+              disabled={safePage === 0}
+              onClick={() => setPage((current) => Math.max(0, current - 1))}
+            >
+              <CaretDoubleLeftIcon size={12} aria-hidden="true" />
+              Prev
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 px-2 py-1 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:text-muted-foreground disabled:cursor-not-allowed disabled:text-muted-foreground"
+              disabled={safePage >= totalPages - 1}
+              onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+            >
+              Next
+              <CaretDoubleRightIcon size={12} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function PowerSkeleton() {
+  return (
+    <Screen>
+      <div aria-busy="true" className="flex flex-col gap-5">
+        <div className="flex items-center gap-6 border-b border-border-subtle">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="flex min-h-10 items-center gap-2">
+              <Skeleton className="h-3.5 w-3.5" />
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-2.5 w-4" />
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 divide-x divide-y divide-border-subtle border border-border [&>div]:flex [&>div]:flex-col [&>div]:gap-3 [&>div]:p-3 sm:[&>div]:p-4">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index}>
+              <div className="flex items-start justify-between gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-4 w-14" />
+              </div>
+              <Skeleton className="h-6 w-28" />
+              <Skeleton className="mt-2 h-1.5 w-full" />
+            </div>
+          ))}
+        </div>
+
+        <div className="border border-border">
+          <div className="flex items-center gap-3 border-b border-border-subtle px-4 py-2">
+            <Skeleton className="h-2.5 w-24" />
+            <Skeleton className="h-2.5 w-16" />
+            <Skeleton className="h-2.5 flex-1" />
+            <Skeleton className="h-2.5 w-10" />
+          </div>
+          {Array.from({ length: 5 }, (_, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-3 border-b border-border-subtle px-4 py-3 last:border-b-0"
+            >
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 flex-1" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <span className="sr-only">Loading power history</span>
+    </Screen>
   );
 }
 
 export function Power() {
   const { snapshot, status, error, refresh } = usePowerHistory();
-  const [activeTab, setActiveTab] = useState<TabKey>("shutdowns");
-
-  const lastStop = useMemo(() => {
-    if (!snapshot) {
-      return null;
-    }
-
-    const stops = [
-      ...snapshot.shutdowns,
-      ...snapshot.restarts,
-      ...snapshot.powerOffs,
-      ...snapshot.unclassifiedStops,
-    ].filter((record) => record.isStop && record.time !== null);
-
-    stops.sort((left, right) => (right.time ?? 0) - (left.time ?? 0));
-
-    return stops[0] ?? null;
-  }, [snapshot]);
+  const [activeTab, setActiveTab] = useState<TabKey>("summary");
 
   const powerStatus =
     !snapshot || snapshot.uptimeSeconds === null
@@ -462,6 +426,7 @@ export function Power() {
         : "text-success";
 
   const counts: Record<TabKey, number | null> = {
+    summary: null,
     shutdowns: snapshot?.shutdowns.length ?? null,
     restarts: snapshot?.restarts.length ?? null,
     "power-offs": snapshot?.powerOffs.length ?? null,
@@ -489,11 +454,7 @@ export function Power() {
   }
 
   if (status === "loading" && !snapshot) {
-    return (
-      <Screen>
-        <StateView title="Reading System log" />
-      </Screen>
-    );
+    return <PowerSkeleton />;
   }
 
   if (status === "error" && !snapshot) {
@@ -536,6 +497,47 @@ export function Power() {
         />
       ) : null}
 
+      <div
+        role="tablist"
+        aria-label="Power history"
+        className="flex items-center gap-6 border-b border-border-subtle"
+      >
+        {TAB_KEYS.map((key) => {
+          const count = counts[key];
+          const current = activeTab === key;
+          const Icon = TAB_ICONS[key];
+
+          return (
+            <button
+              key={key}
+              id={`power-tab-${key}`}
+              type="button"
+              role="tab"
+              aria-selected={current}
+              aria-controls={`power-panel-${key}`}
+              tabIndex={current ? 0 : -1}
+              onClick={() => setActiveTab(key)}
+              onKeyDown={(event) => handleTabKeyDown(event, key)}
+              className={cn(
+                "relative -mb-px flex min-h-10 items-center gap-2 text-[12px] font-medium whitespace-nowrap transition-colors duration-[120ms] ease-soft",
+                "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:rounded-full after:bg-primary after:transition-transform after:duration-200 after:ease-soft",
+                current
+                  ? "text-foreground after:scale-x-100"
+                  : "text-muted-foreground after:scale-x-0 hover:text-foreground",
+              )}
+            >
+              <Icon size={14} aria-hidden="true" />
+              {TAB_LABELS[key]}
+              {count === null ? null : (
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-3 divide-x divide-y divide-border-subtle border border-border">
         <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
           <div className="flex items-start justify-between gap-2">
@@ -543,7 +545,9 @@ export function Power() {
               <ClockIcon size={12} aria-hidden="true" />
               Uptime
             </span>
-            <span className={`inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize ${powerStatusClass}`}>
+            <span
+              className={`inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize ${powerStatusClass}`}
+            >
               {powerStatus === "Restart recommended" ? (
                 <ArrowClockwiseIcon size={10} aria-hidden="true" />
               ) : (
@@ -555,12 +559,18 @@ export function Power() {
           <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
             {snapshot.uptimeSeconds === null ? "—" : formatUptime(snapshot.uptimeSeconds)}
           </span>
-          <div title={powerStatus === "Restart recommended" ? "Uptime exceeded 7 days. Restart recommended." : "Uptime under 7 days. Normal."}>
+          <div
+            title={
+              powerStatus === "Restart recommended"
+                ? "Uptime exceeded 7 days. Restart recommended."
+                : "Uptime under 7 days. Normal."
+            }
+          >
             <Meter
               className="mt-2"
               label="Uptime progress"
               value={snapshot.uptimeSeconds ?? 0}
-              max={7 * 86400}
+              max={7 * 86_400}
               tone={powerStatus === "Restart recommended" ? "warning" : "success"}
             />
           </div>
@@ -585,7 +595,7 @@ export function Power() {
               className="mt-2"
               label="Active time progress"
               value={snapshot.activeSeconds ?? 0}
-              max={7 * 86400}
+              max={7 * 86_400}
               tone="success"
             />
           </div>
@@ -610,7 +620,7 @@ export function Power() {
               className="mt-2"
               label="Sleep time progress"
               value={snapshot.sleepSeconds ?? 0}
-              max={7 * 86400}
+              max={7 * 86_400}
               tone="success"
             />
           </div>
@@ -618,42 +628,28 @@ export function Power() {
       </div>
 
       <div
-        role="tablist"
-        aria-label="Power history"
-        className="flex items-center gap-6 border-b border-border-subtle"
+        id="power-panel-summary"
+        role="tabpanel"
+        aria-labelledby="power-tab-summary"
+        hidden={activeTab !== "summary"}
       >
-        {TAB_KEYS.map((key) => {
-          const count = counts[key];
-          const current = activeTab === key;
-
-          return (
-            <button
-              key={key}
-              id={`power-tab-${key}`}
-              type="button"
-              role="tab"
-              aria-selected={current}
-              aria-controls={`power-panel-${key}`}
-              tabIndex={current ? 0 : -1}
-              onClick={() => setActiveTab(key)}
-              onKeyDown={(event) => handleTabKeyDown(event, key)}
-              className={cn(
-                "relative -mb-px flex min-h-10 items-center gap-2 text-[12px] font-medium whitespace-nowrap transition-colors duration-[120ms] ease-soft",
-                "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:rounded-full after:bg-primary after:transition-transform after:duration-200 after:ease-soft",
-                current
-                  ? "text-foreground after:scale-x-100"
-                  : "text-muted-foreground after:scale-x-0 hover:text-foreground",
-              )}
-            >
-              {TAB_LABELS[key]}
-              {count === null ? null : (
-                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {snapshot ? (
+          <RecordTable
+            label="Critical power records"
+            records={[
+              ...snapshot.shutdowns,
+              ...snapshot.restarts,
+              ...snapshot.powerOffs,
+              ...snapshot.unclassifiedStops,
+            ].filter((record) => record.isStop && record.severity === "critical")}
+            emptyTitle="No critical stops recorded"
+            pageSize={5}
+          />
+        ) : (
+          <section className="border border-border p-4 text-[11px] text-muted-foreground">
+            Power history unavailable.
+          </section>
+        )}
       </div>
 
       <div

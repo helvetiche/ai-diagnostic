@@ -1,30 +1,18 @@
-import { useMemo, type ReactNode } from "react";
-import {
-  ArrowUpIcon,
-  ArrowsDownUpIcon,
-  CpuIcon,
-  GaugeIcon,
-  GraphicsCardIcon,
-  MemoryIcon,
-  PlugsConnectedIcon,
-  ThermometerSimpleIcon,
-} from "@phosphor-icons/react";
+﻿import { useMemo } from "react";
+import { CpuIcon, GraphicsCardIcon, MemoryIcon, PlugsConnectedIcon } from "@phosphor-icons/react";
 
 import { Screen } from "@/components/layout/Screen";
 import { Meter, type MeterTone } from "@/components/primitives/Meter";
-import { Reading } from "@/components/primitives/Reading";
-import { RollingValue } from "@/components/primitives/RollingValue";
+import { Skeleton } from "@/components/primitives/Skeleton";
 import { StateView } from "@/components/primitives/StateView";
+import { Vitals } from "@/components/Vitals";
 import { ResourceChart, type ChartPoint, type ChartSeries } from "@/components/ResourceChart";
 import { Button } from "@/components/primitives/Button";
 import { useResourceStream } from "@/hooks/useResourceStream";
 import { useThermalStream } from "@/hooks/useThermalStream";
-import { formatBytes, formatCelsius, formatPercent, formatRate } from "@/lib/format";
-import { loadTone, loadStatus, loadStatusClass, networkStatus } from "@/lib/loadLevel";
-import { thermalStatus, thermalStatusClass } from "@/lib/thermalLevel";
+import { formatBytes, formatPercent, formatRate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DiskSample, ResourceSample, TopNetworkProcess, TopProcess } from "@/types/resources";
-import type { ThermalSample } from "@/types/thermal";
 
 function TooltipProcessRow({
   name,
@@ -81,7 +69,11 @@ function TopProcessSection({
           <TooltipProcessRow
             key={process.name}
             name={process.name}
-            value={metric === "memory" ? formatBytes(process.memory) : formatPercent(processPercent(process))}
+            value={
+              metric === "memory"
+                ? formatBytes(process.memory)
+                : formatPercent(processPercent(process))
+            }
           />
         ))
       )}
@@ -109,13 +101,7 @@ function TopProcessFooter({
   );
 }
 
-function NetworkSection({
-  title,
-  processes,
-}: {
-  title: string;
-  processes: TopNetworkProcess[];
-}) {
+function NetworkSection({ title, processes }: { title: string; processes: TopNetworkProcess[] }) {
   return (
     <div className="grid gap-1">
       <p className="text-[10px] font-medium text-muted-foreground">{title}</p>
@@ -123,7 +109,11 @@ function NetworkSection({
         <p className="text-[11px] text-muted-foreground">No activity</p>
       ) : (
         processes.map((process) => (
-          <TooltipProcessRow key={process.name} name={process.name} value={formatRate(process.rate)} />
+          <TooltipProcessRow
+            key={process.name}
+            name={process.name}
+            value={formatRate(process.rate)}
+          />
         ))
       )}
     </div>
@@ -148,220 +138,6 @@ function NetworkFooter({ sample }: { sample: ResourceSample }) {
   );
 }
 
-function VitalNote({ children }: { children?: ReactNode }) {
-  return (
-    <p className="mt-1 min-h-4 truncate font-mono text-[11px] leading-4 tabular-nums text-muted-foreground">
-      {children ?? "\u00A0"}
-    </p>
-  );
-}
-
-type VitalStatusItem = {
-  label: string;
-  value: string;
-  className: string;
-  icon: ReactNode;
-};
-
-function VitalStatus({ items }: { items: VitalStatusItem[] }) {
-  return (
-    <span className="flex flex-wrap items-center justify-end gap-1">
-      {items.map((item) => (
-        <span
-          key={item.label}
-          title={item.label}
-          className={cn(
-            "inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 whitespace-nowrap capitalize",
-            item.className,
-          )}
-        >
-          <span aria-hidden="true" className="shrink-0">
-            {item.icon}
-          </span>
-          <span className="sr-only">{item.label}: </span>
-          {item.value}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function Vitals({
-  latest,
-  thermal,
-}: {
-  latest: ResourceSample;
-  thermal: ThermalSample | null;
-}) {
-  const memoryPercent =
-    latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
-  const gpu = latest.gpus[0] ?? null;
-  const gpuLoad = gpu?.usage == null ? null : loadTone(gpu.usage);
-  const gpuTone =
-    gpuLoad === "elevated"
-      ? "warning"
-      : gpuLoad === "high" || gpuLoad === "peak"
-        ? "critical"
-        : "default";
-  const cpuTemp = thermal?.cpu.package?.celsius ?? thermal?.cpu.hottestCore?.celsius ?? null;
-  const gpuTemps =
-    thermal?.gpus.map((item) => item.celsius).filter((value) => value !== null) ?? [];
-  const gpuTemp = gpuTemps.length > 0 ? Math.max(...gpuTemps) : null;
-
-  const cpuStatus = loadStatus(latest.cpu);
-  const cpuThermal = thermalStatus(cpuTemp, "cpu");
-  const gpuStatus = loadStatus(gpu?.usage ?? null);
-  const gpuThermal = thermalStatus(gpuTemp, "gpu");
-  const memoryStatus = loadStatus(memoryPercent);
-  const downloadStatus = networkStatus(latest.download + latest.upload);
-
-  return (
-    <div className="grid grid-cols-4 divide-x divide-border-subtle border border-border [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:p-3 sm:[&>div]:p-4">
-      <div>
-        <Reading
-          label="CPU"
-          value={formatPercent(latest.cpu)}
-          icon={<CpuIcon size={12} />}
-          size="compact"
-          status={
-            <VitalStatus
-              items={[
-                {
-                  label: "Load",
-                  value: cpuStatus ?? "—",
-                  className: loadStatusClass(cpuStatus),
-                  icon: <GaugeIcon size={10} />,
-                },
-                {
-                  label: "Temperature",
-                  value: cpuThermal ?? "—",
-                  className: thermalStatusClass(cpuThermal),
-                  icon: <ThermometerSimpleIcon size={10} />,
-                },
-              ]}
-            />
-          }
-        />
-        <div className="mt-auto">
-          <Meter
-            label="CPU load"
-            value={latest.cpu}
-            tone={loadTone(latest.cpu)}
-          />
-          <VitalNote>
-            <RollingValue value={cpuTemp === null ? "—" : formatCelsius(cpuTemp)} />
-          </VitalNote>
-        </div>
-      </div>
-
-      <div>
-        <Reading
-          label="GPU"
-          value={gpu?.usage == null ? "—" : formatPercent(gpu.usage)}
-          tone={gpuTone}
-          icon={<GraphicsCardIcon size={12} />}
-          size="compact"
-          status={
-            <VitalStatus
-              items={[
-                {
-                  label: "Load",
-                  value: gpuStatus ?? "—",
-                  className: loadStatusClass(gpuStatus),
-                  icon: <GaugeIcon size={10} />,
-                },
-                {
-                  label: "Temperature",
-                  value: gpuThermal ?? "—",
-                  className: thermalStatusClass(gpuThermal),
-                  icon: <ThermometerSimpleIcon size={10} />,
-                },
-              ]}
-            />
-          }
-        />
-        <div className="mt-auto">
-          <Meter
-            label="GPU load"
-            value={gpu?.usage ?? null}
-            tone={loadTone(gpu?.usage ?? 0)}
-          />
-          <VitalNote>
-            <RollingValue value={gpuTemp === null ? "—" : formatCelsius(gpuTemp)} />
-          </VitalNote>
-        </div>
-      </div>
-
-      <div>
-        <Reading
-          label="Memory"
-          value={formatPercent(memoryPercent)}
-          icon={<MemoryIcon size={12} />}
-          size="compact"
-          status={
-            <VitalStatus
-              items={[
-                {
-                  label: "Load",
-                  value: memoryStatus ?? "—",
-                  className: loadStatusClass(memoryStatus),
-                  icon: <GaugeIcon size={10} />,
-                },
-              ]}
-            />
-          }
-        />
-        <div className="mt-auto">
-          <Meter
-            label="Memory load"
-            value={memoryPercent}
-            tone={loadTone(memoryPercent)}
-          />
-          <VitalNote>
-            <RollingValue
-              value={`${formatBytes(latest.memoryUsed)} of ${formatBytes(latest.memoryTotal)}`}
-            />
-          </VitalNote>
-        </div>
-      </div>
-
-      <div>
-        <Reading
-          label="Download"
-          value={formatRate(latest.download)}
-          icon={<PlugsConnectedIcon size={12} />}
-          size="compact"
-          status={
-            <VitalStatus
-              items={[
-                {
-                  label: "Activity",
-                  value: downloadStatus,
-                  className: loadStatusClass(downloadStatus),
-                  icon: <ArrowsDownUpIcon size={10} />,
-                },
-              ]}
-            />
-          }
-        />
-        <div className="mt-auto">
-          <p className="truncate font-mono text-[10px] leading-4 text-muted-foreground">
-            {latest.networkInterfaces.join(", ") || "No adapter"}
-          </p>
-          <VitalNote>
-            <span className="inline-flex items-center gap-1">
-              <ArrowUpIcon size={11} aria-hidden="true" />
-              <span className="font-mono tabular-nums">
-                <RollingValue value={formatRate(latest.upload)} />
-              </span>
-            </span>
-          </VitalNote>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function VolumeRow({ disk }: { disk: DiskSample }) {
   const used = disk.total > 0 ? ((disk.total - disk.available) / disk.total) * 100 : 0;
   const tone: MeterTone = used >= 90 ? "critical" : used >= 80 ? "warning" : "success";
@@ -377,7 +153,7 @@ function VolumeRow({ disk }: { disk: DiskSample }) {
           ) : null}
         </span>
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-          {disk.mount} · {disk.kind}
+          {disk.mount} Â· {disk.kind}
         </span>
       </div>
 
@@ -388,7 +164,7 @@ function VolumeRow({ disk }: { disk: DiskSample }) {
           {formatBytes(disk.available)} free of {formatBytes(disk.total)}
         </span>
         <span className={tone === "critical" ? "text-critical" : "text-muted-foreground"}>
-          {formatPercent(used)} used{note ? ` · ${note}` : ""}
+          {formatPercent(used)} used{note ? ` Â· ${note}` : ""}
         </span>
       </div>
     </li>
@@ -419,10 +195,48 @@ function StoragePanel({ disks }: { disks: DiskSample[] }) {
   );
 }
 
+function OverviewSkeleton() {
+  return (
+    <Screen>
+      <div
+        aria-busy="true"
+        className="grid grid-cols-4 divide-x divide-border-subtle border border-border [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:gap-3 [&>div]:p-3 sm:[&>div]:p-4"
+      >
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index}>
+            <div className="flex items-start justify-between gap-2">
+              <Skeleton className="h-3 w-14" />
+              <Skeleton className="h-4 w-10" />
+            </div>
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="mt-2 h-1.5 w-full" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        ))}
+      </div>
+
+      <div aria-busy="true" className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="border border-border-subtle p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-5 w-12" />
+            </div>
+            <Skeleton className="mt-3 h-32 w-full" />
+          </div>
+        ))}
+      </div>
+      <span className="sr-only">Loading resource samples</span>
+    </Screen>
+  );
+}
+
 export function ResourceGraph() {
   const { samples, status, error, retry } = useResourceStream();
   const { samples: thermalSamples } = useThermalStream();
-  const { snapshot: powerSnapshot } = usePowerHistory();
   const latest = samples.at(-1) ?? null;
   const thermalLatest = thermalSamples.at(-1) ?? null;
 
@@ -430,22 +244,6 @@ export function ResourceGraph() {
     () => new Map(samples.map((sample) => [sample.sampledAt, sample])),
     [samples],
   );
-
-  const powerLastStop = useMemo(() => {
-    if (!powerSnapshot) {
-      return null;
-    }
-
-    const stops = [
-      ...powerSnapshot.shutdowns,
-      ...powerSnapshot.restarts,
-      ...powerSnapshot.powerOffs,
-      ...powerSnapshot.unclassifiedStops,
-    ].filter((record) => record.isStop && record.time !== null);
-
-    stops.sort((left, right) => (right.time ?? 0) - (left.time ?? 0));
-    return stops[0] ?? null;
-  }, [powerSnapshot]);
 
   /*
    * The sampler ticks once per second, which crams 120 points into a 32px-tall
@@ -541,11 +339,7 @@ export function ResourceGraph() {
   }
 
   if (status === "loading" && samples.length === 0) {
-    return (
-      <Screen>
-        <StateView title="Starting sampler" />
-      </Screen>
-    );
+    return <OverviewSkeleton />;
   }
 
   if (!latest) {
@@ -556,8 +350,7 @@ export function ResourceGraph() {
     );
   }
 
-  const memoryPercent =
-    latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
+  const memoryPercent = latest.memoryTotal > 0 ? (latest.memoryUsed / latest.memoryTotal) * 100 : 0;
   const gpu = latest.gpus[0] ?? null;
 
   return (
@@ -589,7 +382,7 @@ export function ResourceGraph() {
             icon={<GraphicsCardIcon size={13} />}
             meta={gpu.name}
             metaMono
-            value={gpu.usage === null ? "—" : formatPercent(gpu.usage)}
+            value={gpu.usage === null ? "â€”" : formatPercent(gpu.usage)}
             data={gpuPoints}
             series={gpuSeries}
             emptyMessage="Collecting samples"

@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { ResourceSample } from "@/types/resources";
 
 const HISTORY_LIMIT = 120;
-const GAP_MS = 5_000;
+const GAP_MS = 5000;
 
 export type ResourceStreamStatus = "loading" | "live" | "paused" | "error";
 
@@ -67,13 +67,13 @@ export function useResourceStream() {
 
         setSamples((previous) => trimTrailingRun([...history, ...previous]));
         setStatus("live");
-      } catch (cause) {
+      } catch (error_) {
         if (cancelled) {
           return;
         }
 
         setStatus("error");
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(error_ instanceof Error ? error_.message : String(error_));
       }
     }
 

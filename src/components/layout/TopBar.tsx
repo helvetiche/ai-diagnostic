@@ -3,6 +3,8 @@ import { formatBytes, formatPercent } from "@/lib/format";
 import { NAV_ITEMS, type ScreenId } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
+const toKb = (value: number) => `${(Math.max(value, 0) / 1024).toFixed(2)}kb`;
+
 function ShellStats() {
   const { resource } = useShellStats();
 
@@ -22,10 +24,8 @@ function ShellStats() {
   }
 
   const gpu = resource.gpus[0] ?? null;
-  const memoryUsed = resource.memoryUsed;
-  const memoryTotal = resource.memoryTotal;
-  const toKb = (value: number) =>
-    `${(Math.max(value, 0) / 1024).toFixed(2)}kb`;
+  const { memoryUsed } = resource;
+  const { memoryTotal } = resource;
 
   return (
     <div className="ml-auto flex flex-col items-start gap-0.5 font-mono text-[10px] font-semibold uppercase leading-4 tabular-nums text-muted-foreground">
@@ -44,7 +44,7 @@ function ShellStats() {
         <span>
           gpu:{" "}
           <span className="text-foreground">
-            {gpu?.usage == null ? "—" : formatPercent(gpu.usage)}
+            {gpu?.usage === null ? "—" : formatPercent(gpu.usage)}
           </span>
         </span>
         <span className="flex items-center gap-1">
@@ -80,13 +80,13 @@ export function TopBar({
                     aria-current={current ? "page" : undefined}
                     onClick={() => onSelect(item.id)}
                     className={cn(
-                      "flex h-full items-center justify-center gap-1 px-2 text-[11px] font-medium whitespace-nowrap transition-colors duration-[120ms] ease-soft",
+                      "flex h-full w-[6.5rem] items-center justify-center gap-1.5 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase whitespace-nowrap transition-colors duration-[120ms] ease-soft sm:w-[7.5rem]",
                       current
                         ? "bg-surface-muted text-foreground"
                         : "text-muted-foreground hover:bg-surface-muted/60 hover:text-foreground",
                     )}
                   >
-                    <Icon size={13} aria-hidden="true" />
+                    <Icon size={13} weight="fill" aria-hidden="true" />
                     <span className="max-sm:sr-only">{item.label}</span>
                   </button>
                 </li>

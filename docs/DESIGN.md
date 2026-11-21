@@ -71,13 +71,13 @@ Rules:
 
 Load meters use their own five-band scale. It is fixed, so it never follows the accent.
 
-| Band       | Light     | Dark      | Range   |
-| ---------- | --------- | --------- | ------- |
-| `low`      | `#2c6b4b` | `#86c9a6` | 0-19    |
-| `moderate` | `#6b5d0a` | `#d9c26b` | 20-39   |
-| `elevated` | `#9a4f0e` | `#e0a15c` | 40-59   |
-| `high`     | `#8f3b34` | `#e39289` | 60-79   |
-| `peak`     | `#6b4a86` | `#c3a8cf` | 80-100  |
+| Band       | Light     | Dark      | Range  |
+| ---------- | --------- | --------- | ------ |
+| `low`      | `#2c6b4b` | `#86c9a6` | 0-19   |
+| `moderate` | `#6b5d0a` | `#d9c26b` | 20-39  |
+| `elevated` | `#9a4f0e` | `#e0a15c` | 40-59  |
+| `high`     | `#8f3b34` | `#e39289` | 60-79  |
+| `peak`     | `#6b4a86` | `#c3a8cf` | 80-100 |
 
 - The band drives the meter fill and the matching percentage text.
 - Bands are exclusive at the lower edge: 20 is `moderate`, 40 is `elevated`, and so on.
@@ -88,12 +88,12 @@ Load meters use their own five-band scale. It is fixed, so it never follows the 
 Meters keep the five-band gradient. The vitals header condenses it into four words so the
 state is readable without parsing the bar.
 
-| Status      | Range  | Text color             |
-| ----------- | ------ | ---------------------- |
-| `low`       | 0-19   | `text-load-low`        |
+| Status      | Range  | Text color              |
+| ----------- | ------ | ----------------------- |
+| `low`       | 0-19   | `text-load-low`         |
 | `normal`    | 20-59  | `text-muted-foreground` |
-| `intensive` | 60-79  | `text-load-high`       |
-| `critical`  | 80-100 | `text-load-peak`       |
+| `intensive` | 60-79  | `text-load-high`        |
+| `critical`  | 80-100 | `text-load-peak`        |
 
 - The label is a small square-cornered tag, right-aligned against the stat name. Load and
   temperature tags sit side by side; they wrap only when the cell is too narrow.
@@ -112,12 +112,12 @@ CPU and GPU also carry a thermal word beside the load word. Bands follow common 
 guidance: idle chips sit near 30-45 °C, normal load runs 40-70 °C, and throttling risk
 starts around 85 °C. GPUs run slightly warmer, so their normal band is wider.
 
-| Status     | CPU       | GPU       | Text color             |
-| ---------- | --------- | --------- | ---------------------- |
-| `cold`     | under 40  | under 45  | `text-info`            |
+| Status     | CPU       | GPU       | Text color              |
+| ---------- | --------- | --------- | ----------------------- |
+| `cold`     | under 40  | under 45  | `text-info`             |
 | `normal`   | 40-64     | 45-69     | `text-muted-foreground` |
-| `hot`      | 65-84     | 70-84     | `text-warning`         |
-| `critical` | 85 and up | 85 and up | `text-critical`        |
+| `hot`      | 65-84     | 70-84     | `text-warning`          |
+| `critical` | 85 and up | 85 and up | `text-critical`         |
 
 - A missing sensor shows `—` in muted text rather than a status.
 - Temperature status colors are separate from the load scale. Do not reuse the load bands
@@ -127,11 +127,11 @@ starts around 85 °C. GPUs run slightly warmer, so their normal band is wider.
 
 Three roles, no more:
 
-| Class         | Where                                                                |
-| ------------- | -------------------------------------------------------------------- |
-| `glass-bar`   | The 52px sticky top rail. Content scrolls under it.                  |
-| `glass-panel` | Hero summary surfaces: Thermals CPU, Power uptime.                |
-| `glass`       | Floating layers: theme popover, process filters, chart tooltip.      |
+| Class         | Where                                                           |
+| ------------- | --------------------------------------------------------------- |
+| `glass-bar`   | The 52px sticky top rail. Content scrolls under it.             |
+| `glass-panel` | Hero summary surfaces: Thermals CPU, Power uptime.              |
+| `glass`       | Floating layers: theme popover, process filters, chart tooltip. |
 
 - Glass uses `--glass` at roughly 60% opacity, `blur(28px) saturate(170%)`, a 1px
   `--glass-border`, and a 1px inset highlight.
@@ -150,17 +150,17 @@ Monospace follows Tailwind's `font-mono`, with a Windows-first stack: `Cascadia 
 `Segoe UI Mono`, `Consolas`. Use it for values, IDs, paths, timings, and versions. Never for
 headings or paragraphs.
 
-| Role        | Size / line | Weight | Notes                      |
-| ----------- | ----------- | ------ | -------------------------- |
-| Page title  | 26 / 36     | 500    | Tight tracking, `-0.03em`  |
-| Panel title | 13 / 20     | 500    | Sentence case              |
-| Reading     | 30 / 30     | 300    | Mono, tabular numerals     |
-| Reading sm  | 20 / 20     | 300    | Mono, stacked summary row  |
-| Hero reading| 44 / 44     | 300    | One per screen at most     |
-| Body        | 13 / 20     | 400    | Default reading size       |
-| Label       | 11 / 16     | 500    | Metadata keys              |
-| Micro       | 10 / 14     | 500    | Table heads, small counts  |
-| Mono value  | 10-12 / 16  | 400    | `tabular-nums`             |
+| Role         | Size / line | Weight | Notes                     |
+| ------------ | ----------- | ------ | ------------------------- |
+| Page title   | 26 / 36     | 500    | Tight tracking, `-0.03em` |
+| Panel title  | 13 / 20     | 500    | Sentence case             |
+| Reading      | 30 / 30     | 300    | Mono, tabular numerals    |
+| Reading sm   | 20 / 20     | 300    | Mono, stacked summary row |
+| Hero reading | 44 / 44     | 300    | One per screen at most    |
+| Body         | 13 / 20     | 400    | Default reading size      |
+| Label        | 11 / 16     | 500    | Metadata keys             |
+| Micro        | 10 / 14     | 500    | Table heads, small counts |
+| Mono value   | 10-12 / 16  | 400    | `tabular-nums`            |
 
 Rules:
 
@@ -224,13 +224,13 @@ The page is mostly flat. Depth comes from the glass and one soft shadow.
 
 ## Motion
 
-| Use                                | Duration | Easing      |
-| ---------------------------------- | -------- | ----------- |
-| Hover, focus, small state change   | 120ms    | `ease-soft` |
-| Popover, tooltip                   | 160ms    | `ease-soft` |
-| Screen transition, disclosure      | 220-240ms| `ease-soft` |
-| Meter fill                         | 500ms    | `ease-soft` |
-| Number roll on change              | 260ms    | `ease-soft` |
+| Use                              | Duration  | Easing      |
+| -------------------------------- | --------- | ----------- |
+| Hover, focus, small state change | 120ms     | `ease-soft` |
+| Popover, tooltip                 | 160ms     | `ease-soft` |
+| Screen transition, disclosure    | 220-240ms | `ease-soft` |
+| Meter fill                       | 500ms     | `ease-soft` |
+| Number roll on change            | 260ms     | `ease-soft` |
 
 - Numbers roll per digit when the value changes. Each digit is a clipped window over a
   0-9 strip, so only the changed digits move. Static characters stay put.
@@ -321,19 +321,19 @@ shadcn/ui supplies accessible primitives. It does not supply the look.
 
 ## Do and do not
 
-| Do                                        | Do not                                      |
-| ----------------------------------------- | ------------------------------------------- |
-| Remove copy that does not change a reading| Narrate the interface                        |
-| Use glass for chrome and summaries        | Put glass behind tables and charts          |
-| Use the accent at the one key action      | Spread accent color across the screen       |
-| Use status color for real severity        | Decorate with red, amber, or green          |
-| Use Phosphor glyphs for actions           | Use Unicode arrows, emoji, or mixed sets    |
-| Use Manrope for UI and mono for facts     | Set headings or paragraphs in mono          |
-| Keep corners systematic                   | Invent a radius per component               |
-| Use one soft shadow                       | Add glow or large shadows everywhere        |
-| Keep motion to arrivals and state changes | Add pulsing dots or idle loops              |
-| Label demo data                           | Invent machine stats or fix results         |
-| Show empty, loading, and error states     | Ship only the happy path                    |
+| Do                                         | Do not                                   |
+| ------------------------------------------ | ---------------------------------------- |
+| Remove copy that does not change a reading | Narrate the interface                    |
+| Use glass for chrome and summaries         | Put glass behind tables and charts       |
+| Use the accent at the one key action       | Spread accent color across the screen    |
+| Use status color for real severity         | Decorate with red, amber, or green       |
+| Use Phosphor glyphs for actions            | Use Unicode arrows, emoji, or mixed sets |
+| Use Manrope for UI and mono for facts      | Set headings or paragraphs in mono       |
+| Keep corners systematic                    | Invent a radius per component            |
+| Use one soft shadow                        | Add glow or large shadows everywhere     |
+| Keep motion to arrivals and state changes  | Add pulsing dots or idle loops           |
+| Label demo data                            | Invent machine stats or fix results      |
+| Show empty, loading, and error states      | Ship only the happy path                 |
 
 ## Decision log
 

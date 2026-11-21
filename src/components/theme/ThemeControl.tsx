@@ -52,7 +52,11 @@ export function ThemeControl() {
         aria-label={dark ? "Appearance, dark theme" : "Appearance, light theme"}
         onClick={() => setOpen((current) => !current)}
       >
-        {dark ? <MoonIcon size={18} aria-hidden="true" /> : <SunIcon size={18} aria-hidden="true" />}
+        {dark ? (
+          <MoonIcon size={18} aria-hidden="true" />
+        ) : (
+          <SunIcon size={18} aria-hidden="true" />
+        )}
       </Button>
 
       {open ? (

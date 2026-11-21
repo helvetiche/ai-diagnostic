@@ -54,8 +54,8 @@ export function formatCelsius(value: number, digits = 0): string {
 
 export function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
+  const hours = Math.floor((seconds % 86_400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
 
   if (days > 0) {
     return `${days}d ${hours}h`;

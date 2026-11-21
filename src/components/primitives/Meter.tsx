@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export type MeterTone =
+type MeterTone =
   | "primary"
   | "success"
   | "warning"
@@ -28,7 +28,7 @@ const TONE_FILL: Record<MeterTone, string> = {
   peak: "bg-load-peak",
 };
 
-export function Meter({
+function Meter({
   value,
   max = 100,
   tone = "neutral",
@@ -75,3 +75,6 @@ export function Meter({
     </div>
   );
 }
+
+export { Meter };
+export type { MeterTone };

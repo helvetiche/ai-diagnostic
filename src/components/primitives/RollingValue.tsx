@@ -10,7 +10,7 @@ export function RollingValue({ value }: { value: string }) {
   return (
     <>
       <span aria-hidden="true">
-        {Array.from(value).map((character, index) => {
+        {[...value].map((character, index) => {
           if (character < "0" || character > "9") {
             return <span key={index}>{character}</span>;
           }

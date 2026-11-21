@@ -8,15 +8,14 @@
     <script>
       (function () {
         try {
-          var raw = localStorage.getItem("windog.theme");
-          var saved = raw ? JSON.parse(raw) : {};
-          var mode = saved.mode === "light" || saved.mode === "dark" ? saved.mode : "system";
-          var accents = ["steel", "jade", "clay", "plum"];
-          var accent = accents.indexOf(saved.accent) >= 0 ? saved.accent : "steel";
-          var dark =
+          const raw = localStorage.getItem("windog.theme");
+          const saved = raw ? JSON.parse(raw) : {};
+          const mode = saved.mode === "light" || saved.mode === "dark" ? saved.mode : "system";
+          const accents = ["steel", "jade", "clay", "plum"];
+          const accent = accents.indexOf(saved.accent) >= 0 ? saved.accent : "steel";
+          const dark =
             mode === "dark" ||
-            (mode === "system" &&
-              window.matchMedia("(prefers-color-scheme: dark)").matches);
+            (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
           document.documentElement.classList.toggle("dark", dark);
           document.documentElement.dataset.accent = accent;

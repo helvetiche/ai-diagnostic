@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-export type MarkTone = "muted" | "primary" | "success" | "warning" | "critical" | "info";
+type MarkTone = "muted" | "primary" | "success" | "warning" | "critical" | "info";
 
 const TONE_TEXT: Record<MarkTone, string> = {
   muted: "text-muted-foreground",
@@ -22,7 +22,7 @@ const TONE_MARK: Record<MarkTone, string> = {
   info: "bg-info",
 };
 
-export function StatusMark({
+function StatusMark({
   tone = "muted",
   labelTone = false,
   children,
@@ -46,3 +46,6 @@ export function StatusMark({
     </span>
   );
 }
+
+export { StatusMark };
+export type { MarkTone };

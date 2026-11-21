@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { TopBar } from "./components/layout/TopBar";
 import { useSamplerStreaming } from "./hooks/useSamplerStreaming";
 import type { ScreenId } from "./lib/navigation";
+import { Configure } from "./screens/Configure";
 import { Power } from "./screens/Power";
 import { Processes } from "./screens/Processes";
 import { ResourceGraph } from "./screens/ResourceGraph";
@@ -33,8 +34,10 @@ function App() {
             <ResourceGraph />
           ) : screen === "power" ? (
             <Power />
-          ) : (
+          ) : screen === "processes" ? (
             <Processes />
+          ) : (
+            <Configure />
           )}
         </div>
       </main>

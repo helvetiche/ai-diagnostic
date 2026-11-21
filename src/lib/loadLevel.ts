@@ -1,6 +1,6 @@
-export type LoadTone = "low" | "moderate" | "elevated" | "high" | "peak";
+type LoadTone = "low" | "moderate" | "elevated" | "high" | "peak";
 
-export function loadTone(percent: number): LoadTone {
+function loadTone(percent: number): LoadTone {
   if (!Number.isFinite(percent) || percent < 20) {
     return "low";
   }
@@ -24,7 +24,7 @@ const TONE_CLASS: Record<LoadTone, string> = {
   peak: "text-load-peak",
 };
 
-export function loadToneClass(percent: number): string {
+function loadToneClass(percent: number): string {
   return TONE_CLASS[loadTone(percent)];
 }
 
@@ -32,9 +32,9 @@ export function loadToneClass(percent: number): string {
  * Four-word status for the vitals header. The five-color meter keeps the finer
  * gradient; the label groups it into buckets a person can read at a glance.
  */
-export type LoadStatus = "low" | "normal" | "intensive" | "critical";
+type LoadStatus = "low" | "normal" | "intensive" | "critical";
 
-export function loadStatus(percent: number | null): LoadStatus | null {
+function loadStatus(percent: number | null): LoadStatus | null {
   if (percent === null || !Number.isFinite(percent)) {
     return null;
   }
@@ -57,7 +57,7 @@ const STATUS_CLASS: Record<LoadStatus, string> = {
   critical: "text-load-peak",
 };
 
-export function loadStatusClass(status: LoadStatus | null): string {
+function loadStatusClass(status: LoadStatus | null): string {
   return status === null ? "text-muted-foreground" : STATUS_CLASS[status];
 }
 
@@ -66,7 +66,7 @@ export function loadStatusClass(status: LoadStatus | null): string {
  * activity on a typical link, not link saturation: quiet, everyday traffic,
  * heavy transfer, and a saturated gigabit connection.
  */
-export function networkStatus(bytesPerSecond: number): LoadStatus {
+function networkStatus(bytesPerSecond: number): LoadStatus {
   const megabytes = Math.max(bytesPerSecond, 0) / (1024 * 1024);
 
   if (megabytes < 1) {
@@ -80,3 +80,6 @@ export function networkStatus(bytesPerSecond: number): LoadStatus {
   }
   return "critical";
 }
+
+export { loadTone, loadToneClass, loadStatus, loadStatusClass, networkStatus };
+export type { LoadTone, LoadStatus };

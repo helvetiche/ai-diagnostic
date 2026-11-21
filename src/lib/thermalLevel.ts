@@ -1,4 +1,4 @@
-export type ThermalStatus = "cold" | "normal" | "hot" | "critical";
+type ThermalStatus = "cold" | "normal" | "hot" | "critical";
 
 type ThermalDevice = "cpu" | "gpu";
 
@@ -7,7 +7,7 @@ type ThermalDevice = "cpu" | "gpu";
  * normal load runs 40-70 C, and throttling risk starts around 85 C. GPUs run a
  * few degrees warmer than CPUs under load, so they get a wider normal band.
  */
-export function thermalStatus(celsius: number | null, device: ThermalDevice): ThermalStatus | null {
+function thermalStatus(celsius: number | null, device: ThermalDevice): ThermalStatus | null {
   if (celsius === null || !Number.isFinite(celsius)) {
     return null;
   }
@@ -34,6 +34,9 @@ const STATUS_CLASS: Record<ThermalStatus, string> = {
   critical: "text-critical",
 };
 
-export function thermalStatusClass(status: ThermalStatus | null): string {
+function thermalStatusClass(status: ThermalStatus | null): string {
   return status === null ? "text-muted-foreground" : STATUS_CLASS[status];
 }
+
+export { thermalStatus, thermalStatusClass };
+export type { ThermalStatus };

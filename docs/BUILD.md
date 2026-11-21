@@ -223,6 +223,18 @@ auto-update the driver without asking.
 - Uninstalling Windog leaves PawnIO installed.
 - The driver notice, GPL text, and source link ship with the installer.
 
+### 9. Configure
+
+System configuration, starting with Windows power plans.
+
+- Dedicated Configure destination. First slice reads the installed Windows power
+  schemes through `powercfg`, shows the active plan, and lets the tech switch the
+  active scheme with confirmation. Later slices can add timeouts, Fast Startup,
+  display, and startup-app controls.
+- Every change is applied through the native tool and re-read to confirm. Failures
+  show the Windows error and leave the previous plan active.
+- Demo data is not used; values come from the OS.
+
 ## Screens explicitly out of scope for this pass
 
 - Export and evidence pack (M2)
@@ -263,8 +275,8 @@ Fixtures land in `src/fixtures/` and are imported by the scan screen only.
 
 1. Does the first pass run against fixture data only, or should the Tauri Rust
    side return real performance counters now? Resolved for Resource Graph: real counters from sysinfo (GetSystemTimes,
-    GlobalMemoryStatusEx, GetDiskFreeSpaceEx, GetIfTable2). Other screens still
-    use fixtures.
+   GlobalMemoryStatusEx, GetDiskFreeSpaceEx, GetIfTable2). Other screens still
+   use fixtures.
 2. Home start: does the user pick a symptom first, or does the app land on a
    prepared scan the tech triggers?
 3. Is the machine identity line real (from Tauri) or fixture for this pass?

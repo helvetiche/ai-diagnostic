@@ -79,13 +79,13 @@ export function useThermalStream() {
 
         setSamples((previous) => mergeSamples(history, previous));
         setStatus("live");
-      } catch (cause) {
+      } catch (error_) {
         if (cancelled) {
           return;
         }
 
         setStatus("error");
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(error_ instanceof Error ? error_.message : String(error_));
       }
     }
 

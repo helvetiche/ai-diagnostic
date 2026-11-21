@@ -1,3 +1,4 @@
+mod configure;
 mod network;
 mod power;
 mod resources;
@@ -19,6 +20,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            configure::list_power_plans,
+            configure::set_power_plan,
+            configure::get_power_timeouts,
+            configure::set_power_timeouts,
+            configure::get_fast_startup,
+            configure::set_fast_startup,
             resources::resource_history,
             resources::get_processes,
             resources::set_resource_streaming,

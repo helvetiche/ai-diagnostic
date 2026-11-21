@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CaretDownIcon,
   CaretUpIcon,
+  CpuIcon,
+  GraphicsCardIcon,
+  ListBulletsIcon,
+  MagnifyingGlassIcon,
+  MemoryIcon,
   SlidersHorizontalIcon,
 } from "@phosphor-icons/react";
 
@@ -10,9 +15,12 @@ import { Button } from "@/components/primitives/Button";
 import { Panel } from "@/components/primitives/Panel";
 import { StateView } from "@/components/primitives/StateView";
 import { StatusMark } from "@/components/primitives/StatusMark";
+import { Skeleton } from "@/components/primitives/Skeleton";
+import { Vitals } from "@/components/Vitals";
 import { Sparkline } from "@/components/Sparkline";
 import { useProcesses } from "@/hooks/useProcesses";
 import { useResourceStream } from "@/hooks/useResourceStream";
+import { useThermalStream } from "@/hooks/useThermalStream";
 import { formatBytes, formatPercent } from "@/lib/format";
 import { loadToneClass } from "@/lib/loadLevel";
 import { cn } from "@/lib/utils";
@@ -47,16 +55,16 @@ function processBand(value: number): Band {
 
 function SortHeader({
   label,
+  icon,
   active,
   direction,
   onClick,
-  align = "left",
 }: {
   label: string;
+  icon?: ReactNode;
   active: boolean;
   direction: "asc" | "desc";
   onClick: () => void;
-  align?: "left" | "right";
 }) {
   return (
     <button
@@ -65,9 +73,13 @@ function SortHeader({
       className={cn(
         "inline-flex min-h-10 items-center gap-1 text-[10px] font-medium transition-colors duration-[120ms] ease-soft",
         active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-        align === "right" && "flex-row-reverse",
       )}
     >
+      {icon ? (
+        <span aria-hidden="true" className="shrink-0 text-muted-foreground">
+          {icon}
+        </span>
+      ) : null}
       {label}
       {active ? (
         direction === "asc" ? (
@@ -240,10 +252,62 @@ function FilterPanel({
   );
 }
 
+function ProcessMetric({
+  values,
+  color,
+  min,
+  max,
+  children,
+}: {
+  values: number[];
+  color: string;
+  min?: number;
+  max?: number;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-3">
+      <Sparkline
+        className="box-content shrink-0 border border-border-subtle"
+        values={values}
+        color={color}
+        min={min}
+        max={max}
+      />
+      <div className="flex min-w-[3.5rem] items-baseline justify-end gap-1.5 whitespace-nowrap">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function VitalsSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      className="grid grid-cols-4 divide-x divide-border-subtle border border-border [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:gap-3 [&>div]:p-3 sm:[&>div]:p-4"
+    >
+      {Array.from({ length: 4 }, (_, index) => (
+        <div key={index}>
+          <div className="flex items-start justify-between gap-2">
+            <Skeleton className="h-3 w-14" />
+            <Skeleton className="h-4 w-10" />
+          </div>
+          <Skeleton className="h-6 w-20" />
+          <Skeleton className="mt-2 h-1.5 w-full" />
+          <Skeleton className="h-3 w-12" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Processes() {
   const { processes, processHistory, status, error, retry } = useProcesses();
   const { samples } = useResourceStream();
+  const { samples: thermalSamples } = useThermalStream();
   const latest = samples.at(-1) ?? null;
+  const thermalLatest = thermalSamples.at(-1) ?? null;
   const systemMemoryTotal = latest?.memoryTotal ?? 0;
 
   const [query, setQuery] = useState("");
@@ -262,6 +326,23 @@ export function Processes() {
   const filterRootRef = useRef<HTMLDivElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    }
+
+    document.addEventListener("keydown", handleShortcut);
+
+    return () => {
+      document.removeEventListener("keydown", handleShortcut);
+    };
+  }, []);
 
   useEffect(() => {
     setPage(0);
@@ -333,17 +414,7 @@ export function Processes() {
       }
       return true;
     });
-  }, [
-    processes,
-    query,
-    levelFilter,
-    minCpu,
-    maxCpu,
-    gpuOnly,
-    gpuLevelFilter,
-    minGpu,
-    maxGpu,
-  ]);
+  }, [processes, query, levelFilter, minCpu, maxCpu, gpuOnly, gpuLevelFilter, minGpu, maxGpu]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -429,12 +500,15 @@ export function Processes() {
     setQuery("");
   }
 
+  const vitals = latest ? <Vitals latest={latest} thermal={thermalLatest} /> : null;
+
   if (status === "error" && processes.length === 0) {
     return (
       <Screen>
         <PageHeader title="Processes">
           <StatusMark tone="critical">Unavailable</StatusMark>
         </PageHeader>
+        {vitals ?? <VitalsSkeleton />}
         <StateView
           title="Process sampler unavailable"
           code={error ?? "Unknown error"}
@@ -454,6 +528,7 @@ export function Processes() {
         <PageHeader title="Processes">
           <StatusMark tone="muted">Starting</StatusMark>
         </PageHeader>
+        {vitals ?? <VitalsSkeleton />}
         <StateView title="Starting process sampler" />
       </Screen>
     );
@@ -461,20 +536,33 @@ export function Processes() {
 
   return (
     <Screen>
-      <PageHeader title="Processes">
-        <StatusMark tone="success">Live</StatusMark>
-      </PageHeader>
+      {vitals ?? <VitalsSkeleton />}
 
-      <Panel>
+      <Panel className="bg-transparent shadow-none">
         <div className="flex flex-wrap items-center gap-2 p-3">
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter by name"
-            aria-label="Filter processes by name"
-            className={cn(FIELD_CLASS, "min-w-[12rem] flex-1")}
-          />
+          <div className="relative min-w-[12rem] flex-1">
+            <MagnifyingGlassIcon
+              size={13}
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter by name"
+              aria-label="Filter processes by name"
+              aria-keyshortcuts="Control+F"
+              className={cn(FIELD_CLASS, "pl-9 pr-16")}
+            />
+            <kbd
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 border border-border-subtle px-1.5 py-0.5 font-mono text-[10px] leading-4 text-muted-foreground"
+            >
+              Ctrl F
+            </kbd>
+          </div>
 
           <div className="relative" ref={filterRootRef}>
             <Button
@@ -527,7 +615,9 @@ export function Processes() {
         {sorted.length === 0 ? (
           <div className="border-t border-border-subtle px-4 py-10 text-center">
             <p className="text-[12px] text-muted-foreground">
-              {processes.length === 0 ? "No processes reported." : "No process matches these filters."}
+              {processes.length === 0
+                ? "No processes reported."
+                : "No process matches these filters."}
             </p>
             {processes.length > 0 ? (
               <Button variant="ghost" className="mt-2" onClick={resetFilters}>
@@ -544,38 +634,39 @@ export function Processes() {
                     <th scope="col" className="px-4 py-1 text-left">
                       <SortHeader
                         label="Process"
+                        icon={<ListBulletsIcon size={12} />}
                         active={sortKey === "name"}
                         direction={sortDir}
                         onClick={() => toggleSort("name")}
                       />
                     </th>
-                    <th scope="col" className="w-[13rem] px-3 py-1 text-right">
+                    <th scope="col" className="w-[11rem] px-3 py-1 text-right">
                       <div className="flex justify-end">
                         <SortHeader
                           label="CPU"
-                          align="right"
+                          icon={<CpuIcon size={12} />}
                           active={sortKey === "cpu"}
                           direction={sortDir}
                           onClick={() => toggleSort("cpu")}
                         />
                       </div>
                     </th>
-                    <th scope="col" className="w-[9rem] px-3 py-1 text-right">
+                    <th scope="col" className="w-[12rem] px-3 py-1 text-right">
                       <div className="flex justify-end">
                         <SortHeader
                           label="Memory"
-                          align="right"
+                          icon={<MemoryIcon size={12} />}
                           active={sortKey === "memory"}
                           direction={sortDir}
                           onClick={() => toggleSort("memory")}
                         />
                       </div>
                     </th>
-                    <th scope="col" className="w-[6rem] px-4 py-1 text-right">
+                    <th scope="col" className="w-[9rem] px-4 py-1 text-right">
                       <div className="flex justify-end">
                         <SortHeader
                           label="GPU"
-                          align="right"
+                          icon={<GraphicsCardIcon size={12} />}
                           active={sortKey === "gpu"}
                           direction={sortDir}
                           onClick={() => toggleSort("gpu")}
@@ -604,38 +695,56 @@ export function Processes() {
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex items-center justify-end gap-3">
-                            <Sparkline
-                              className="hidden md:inline-block"
-                              values={history.map((point) => point.cpu)}
-                              color="var(--chart-1)"
-                              min={0}
-                              max={100}
-                            />
+                          <ProcessMetric
+                            values={history.map((point) => point.cpu)}
+                            color="var(--chart-1)"
+                            min={0}
+                            max={100}
+                          >
                             <span
                               className={cn(
-                                "w-12 text-right font-mono text-[11px] tabular-nums",
+                                "text-right font-mono text-[11px] tabular-nums",
                                 loadToneClass(process.cpu),
                               )}
                             >
                               {formatPercent(process.cpu)}
                             </span>
-                          </div>
+                          </ProcessMetric>
                         </td>
-                        <td className="px-3 py-2 text-right">
-                          <span className="font-mono text-[11px] tabular-nums text-foreground">
-                            {formatBytes(process.memory)}
-                          </span>
-                          {systemMemoryTotal > 0 ? (
-                            <span className="ml-1.5 font-mono text-[10px] tabular-nums text-muted-foreground">
-                              {formatPercent((process.memory / systemMemoryTotal) * 100)}
+                        <td className="px-3 py-2">
+                          <ProcessMetric
+                            values={history.map((point) =>
+                              systemMemoryTotal > 0
+                                ? (point.memory / systemMemoryTotal) * 100
+                                : point.memory,
+                            )}
+                            color="var(--chart-2)"
+                            min={0}
+                            max={systemMemoryTotal > 0 ? 100 : undefined}
+                          >
+                            <span className="font-mono text-[11px] tabular-nums text-foreground">
+                              {formatBytes(process.memory)}
                             </span>
-                          ) : null}
+                            {systemMemoryTotal > 0 ? (
+                              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                                {formatPercent((process.memory / systemMemoryTotal) * 100)}
+                              </span>
+                            ) : null}
+                          </ProcessMetric>
                         </td>
-                        <td className="px-4 py-2 text-right">
-                          <span className="font-mono text-[11px] tabular-nums text-foreground">
-                            {process.gpu === null ? "—" : formatPercent(process.gpu)}
-                          </span>
+                        <td className="px-4 py-2">
+                          <ProcessMetric
+                            values={history
+                              .map((point) => point.gpu)
+                              .filter((value): value is number => value !== null)}
+                            color="var(--chart-1)"
+                            min={0}
+                            max={100}
+                          >
+                            <span className="font-mono text-[11px] tabular-nums text-foreground">
+                              {process.gpu === null ? "—" : formatPercent(process.gpu)}
+                            </span>
+                          </ProcessMetric>
                         </td>
                       </tr>
                     );

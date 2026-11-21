@@ -15,13 +15,7 @@ export function Screen({ children, className }: { children: ReactNode; className
   );
 }
 
-export function PageHeader({
-  title,
-  children,
-}: {
-  title: string;
-  children?: ReactNode;
-}) {
+export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <h1 className="min-w-0 text-[26px] leading-9 font-medium tracking-[-0.03em] text-foreground">
