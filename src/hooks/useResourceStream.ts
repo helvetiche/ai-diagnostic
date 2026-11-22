@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ResourceSample } from "@/types/resources";
 
+import { preloadCache } from "@/lib/preloadCache";
+
 const HISTORY_LIMIT = 120;
 const GAP_MS = 5000;
 
@@ -34,8 +36,11 @@ function appendSample(samples: ResourceSample[], sample: ResourceSample): Resour
 }
 
 export function useResourceStream() {
-  const [samples, setSamples] = useState<ResourceSample[]>([]);
-  const [status, setStatus] = useState<ResourceStreamStatus>("loading");
+  const cachedSamples = preloadCache.resourceSamples;
+  const [samples, setSamples] = useState<ResourceSample[]>(() => cachedSamples ?? []);
+  const [status, setStatus] = useState<ResourceStreamStatus>(() =>
+    cachedSamples && cachedSamples.length > 0 ? "live" : "loading",
+  );
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -44,7 +49,9 @@ export function useResourceStream() {
     let unlisten: (() => void) | undefined;
 
     async function start() {
-      setStatus("loading");
+      if (!(preloadCache.resourceSamples && preloadCache.resourceSamples.length > 0)) {
+        setStatus("loading");
+      }
       setError(null);
 
       try {

@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ThermalSample } from "@/types/thermal";
 
+import { preloadCache } from "@/lib/preloadCache";
+
 const HISTORY_LIMIT = 300;
 const GAP_MS = 10_000;
 
@@ -46,8 +48,11 @@ function mergeSamples(history: ThermalSample[], live: ThermalSample[]): ThermalS
 }
 
 export function useThermalStream() {
-  const [samples, setSamples] = useState<ThermalSample[]>([]);
-  const [status, setStatus] = useState<ThermalStreamStatus>("loading");
+  const cachedSamples = preloadCache.thermalSamples;
+  const [samples, setSamples] = useState<ThermalSample[]>(() => cachedSamples ?? []);
+  const [status, setStatus] = useState<ThermalStreamStatus>(() =>
+    cachedSamples && cachedSamples.length > 0 ? "live" : "loading",
+  );
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -56,7 +61,9 @@ export function useThermalStream() {
     let unlisten: (() => void) | undefined;
 
     async function start() {
-      setStatus("loading");
+      if (!(preloadCache.thermalSamples && preloadCache.thermalSamples.length > 0)) {
+        setStatus("loading");
+      }
       setError(null);
 
       try {

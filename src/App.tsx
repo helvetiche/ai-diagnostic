@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
+import { PreparingDiagnostic } from "./components/PreparingDiagnostic";
 import { TopBar } from "./components/layout/TopBar";
+import { usePreload } from "./hooks/usePreload";
 import { useSamplerStreaming } from "./hooks/useSamplerStreaming";
 import type { ScreenId } from "./lib/navigation";
 import { Configure } from "./screens/Configure";
@@ -10,6 +12,7 @@ import { Processes } from "./screens/Processes";
 import { ResourceGraph } from "./screens/ResourceGraph";
 
 function App() {
+  const { ready, tasks, progress } = usePreload();
   const [screen, setScreen] = useState<ScreenId>("overview");
   const scrollerRef = useRef<HTMLDivElement>(null);
   useSamplerStreaming();
@@ -17,6 +20,10 @@ function App() {
   useEffect(() => {
     scrollerRef.current?.scrollTo(0, 0);
   }, [screen]);
+
+  if (!ready) {
+    return <PreparingDiagnostic tasks={tasks} progress={progress} />;
+  }
 
   return (
     <div ref={scrollerRef} className="app-canvas h-full overflow-y-auto overscroll-y-none">
@@ -37,8 +44,12 @@ function App() {
             <Power />
           ) : screen === "processes" ? (
             <Processes />
-          ) : screen === "logs" ? (
-            <Logs />
+          ) : screen === "reliability" ? (
+            <Logs view="reliability" />
+          ) : screen === "events" ? (
+            <Logs view="events" />
+          ) : screen === "devices" ? (
+            <Logs view="devices" />
           ) : (
             <Configure />
           )}

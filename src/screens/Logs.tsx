@@ -1,23 +1,21 @@
 import {
-  CpuIcon,
-  DesktopIcon,
-  DeviceMobileIcon,
-  HardDrivesIcon,
-  PackageIcon,
-  ShieldCheckIcon,
+  CaretDoubleLeftIcon,
+  CaretDoubleRightIcon,
+  CheckCircleIcon,
   WarningIcon,
+  XCircleIcon,
 } from "@phosphor-icons/react";
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/primitives/Button";
 import { Panel } from "@/components/primitives/Panel";
 import { Skeleton } from "@/components/primitives/Skeleton";
 import { StateView } from "@/components/primitives/StateView";
-import { StatusMark } from "@/components/primitives/StatusMark";
 import { useLogs } from "@/hooks/useLogs";
-import { formatBytes, formatDateTime } from "@/lib/format";
+import { consumePendingLogSection } from "@/lib/logSection";
+import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { LogsSnapshot } from "@/types/logs";
+
 
 const EVENT_CATEGORIES = [
   "All",
@@ -43,59 +41,35 @@ function parseIso(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function yesNo(value: boolean | null): string {
-  if (value === null) {
-    return "—";
-  }
-  return value ? "Yes" : "No";
-}
-
-function numberOrDash(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "—";
-  }
-  return String(value);
-}
-
-function StorageHealthBadge({ disk }: { disk: LogsSnapshot["storage"][number] }) {
-  if (disk.smartPredictFailure === true) {
-    return <StatusMark tone="critical">SMART warning</StatusMark>;
-  }
-  if (disk.healthStatus !== null && disk.healthStatus !== 0) {
-    // 0 = Healthy in MSFT_PhysicalDisk.HealthStatus
-    return <StatusMark tone="warning">Degraded</StatusMark>;
-  }
-  if (disk.healthStatus === 0) {
-    return <StatusMark tone="success">Healthy</StatusMark>;
-  }
-  return <StatusMark tone="info">Unknown</StatusMark>;
-}
-
-function SummaryCard({
-  label,
-  value,
-  hint,
+function Badge({
   icon,
+  children,
+  tone = "muted",
 }: {
-  label: string;
-  value: string;
-  hint?: string;
-  icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
+  icon: ReactNode;
+  children: ReactNode;
+  tone?: "success" | "warning" | "critical" | "info" | "muted";
 }) {
-  const Icon = icon;
+  const toneClass =
+    tone === "success"
+      ? "text-success"
+      : tone === "warning"
+        ? "text-warning"
+        : tone === "critical"
+          ? "text-critical"
+          : tone === "info"
+            ? "text-info"
+            : "text-muted-foreground";
   return (
-    <div className="flex min-w-0 flex-col gap-1 border border-border-subtle bg-surface p-3 sm:p-4">
-      <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-        <Icon size={12} aria-hidden={true} />
-        {label}
-      </div>
-      <span className="font-mono text-[16px] leading-none tabular-nums text-foreground">
-        {value}
-      </span>
-      {hint ? (
-        <span className="text-[10px] leading-4 text-muted-foreground">{hint}</span>
-      ) : null}
-    </div>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3",
+        toneClass,
+      )}
+    >
+      {icon}
+      {children}
+    </span>
   );
 }
 
@@ -104,7 +78,7 @@ function LogsSkeleton() {
     <Screen>
       <div aria-busy="true" className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {Array.from({ length: 8 }, (_, index) => (
+          {Array.from({ length: 4 }, (_, index) => (
             <div key={index} className="border border-border-subtle p-3">
               <Skeleton className="h-3 w-20" />
               <Skeleton className="mt-2 h-5 w-16" />
@@ -129,10 +103,42 @@ function LogsSkeleton() {
   );
 }
 
-export function Logs() {
+export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events" | "devices" }) {
   const { snapshot, status, error, refresh } = useLogs();
   const [category, setCategory] = useState<EventCategory>("All");
+  const [reliabilitySearch, setReliabilitySearch] = useState("");
+  const [reliabilityFilter, setReliabilityFilter] = useState<"All" | "Crash" | "Failed">("All");
   const [softwareOpen, setSoftwareOpen] = useState(false);
+  const [devicesPage, setDevicesPage] = useState(0);
+  const [reliabilityPage, setReliabilityPage] = useState(0);
+  const [eventsPage, setEventsPage] = useState(0);
+  const [softwarePage, setSoftwarePage] = useState(0);
+
+  const reliabilityRef = useRef<HTMLElement>(null);
+  const eventsRef = useRef<HTMLElement>(null);
+  const devicesRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    setReliabilityPage(0);
+  }, [reliabilitySearch, reliabilityFilter]);
+
+  useEffect(() => {
+    const section = consumePendingLogSection();
+    if (!section) {
+      return;
+    }
+    const target =
+      section === "reliability"
+        ? reliabilityRef.current
+        : section === "events"
+          ? eventsRef.current
+          : section === "devices"
+            ? devicesRef.current
+            : null;
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [snapshot, status]);
 
   const filteredEvents = useMemo(() => {
     if (!snapshot) {
@@ -143,6 +149,29 @@ export function Logs() {
     }
     return snapshot.events.filter((event) => event.category === category);
   }, [snapshot, category]);
+
+  const filteredReliability = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
+    const query = reliabilitySearch.trim().toLowerCase();
+    return snapshot.reliability.filter((record) => {
+      const isCrash = /crash|fail|error|stop/i.test(record.message ?? "");
+      if (reliabilityFilter === "Crash" && !isCrash) {
+        return false;
+      }
+      if (reliabilityFilter === "Failed" && isCrash) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return [record.productName, record.message, record.sourceName, String(record.eventIdentifier ?? "")]
+        .some((value) => (value ?? "").toLowerCase().includes(query));
+    });
+  }, [snapshot, reliabilitySearch, reliabilityFilter]);
+
+  const showAll = view === "all";
 
   if (status === "loading" && !snapshot) {
     return <LogsSkeleton />;
@@ -168,20 +197,6 @@ export function Logs() {
     return null;
   }
 
-  const os = snapshot.os;
-  const machine = snapshot.machine;
-  const security = snapshot.security;
-  const battery = snapshot.battery;
-
-  const batteryHealth =
-    battery && battery.designCapacity && battery.fullChargeCapacity
-      ? Math.round((battery.fullChargeCapacity / battery.designCapacity) * 100)
-      : null;
-
-  const deviceProblemCount = snapshot.deviceProblems.length;
-  const storageProblemCount = snapshot.storage.filter(
-    (disk) => disk.smartPredictFailure === true || (disk.healthStatus !== null && disk.healthStatus !== 0),
-  ).length;
 
   return (
     <Screen>
@@ -206,152 +221,7 @@ export function Logs() {
         </Panel>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard
-          label="Operating system"
-          value={os?.caption ?? "—"}
-          hint={os?.version ? `Build ${os.build ?? "?"} · ${os.version}` : undefined}
-          icon={DesktopIcon}
-        />
-        <SummaryCard
-          label="Machine"
-          value={machine?.model ?? machine?.manufacturer ?? "—"}
-          hint={machine?.serialNumber ? `S/N ${machine.serialNumber}` : undefined}
-          icon={CpuIcon}
-        />
-        <SummaryCard
-          label="Memory"
-          value={
-            os?.totalVisibleMemoryKb
-              ? formatBytes(os.totalVisibleMemoryKb * 1024)
-              : "—"
-          }
-          hint={
-            os?.freePhysicalMemoryKb
-              ? `${formatBytes(os.freePhysicalMemoryKb * 1024)} free`
-              : undefined
-          }
-          icon={DeviceMobileIcon}
-        />
-        <SummaryCard
-          label="Storage"
-          value={`${snapshot.storage.length} drive${snapshot.storage.length === 1 ? "" : "s"}`}
-          hint={
-            storageProblemCount > 0
-              ? `${storageProblemCount} reporting issues`
-              : "All healthy"
-          }
-          icon={HardDrivesIcon}
-        />
-        <SummaryCard
-          label="Battery"
-          value={battery ? `${battery.chargePercent ?? "—"}%` : "None"}
-          hint={
-            batteryHealth !== null
-              ? `Health ${batteryHealth}% of design`
-              : battery
-                ? "Health unknown"
-                : "No battery detected"
-          }
-          icon={DeviceMobileIcon}
-        />
-        <SummaryCard
-          label="Device problems"
-          value={String(deviceProblemCount)}
-          hint={deviceProblemCount === 0 ? "No problem devices" : "Check Device Manager"}
-          icon={WarningIcon}
-        />
-        <SummaryCard
-          label="Security"
-          value={security?.defenderRealtime ? "Protected" : security?.defenderRealtime === false ? "At risk" : "Unknown"}
-          hint={
-            security
-              ? `Firewall ${security.firewallProfiles.filter((p) => p.enabled).length}/${security.firewallProfiles.length} · BitLocker ${security.bitlocker.filter((v) => v.protectionStatus === 1).length}/${security.bitlocker.length}`
-              : undefined
-          }
-          icon={ShieldCheckIcon}
-        />
-        <SummaryCard
-          label="Software"
-          value={String(snapshot.softwareCount)}
-          hint={`${snapshot.drivers.length} drivers · ${snapshot.reliability.length} reliability records`}
-          icon={PackageIcon}
-        />
-      </div>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-[13px] font-medium text-foreground">Security posture</h2>
-        <div className="grid grid-cols-1 gap-3 border border-border sm:grid-cols-2">
-          <div className="flex flex-col gap-2 p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Defender real-time protection</span>
-              <span className={cn("font-mono text-[11px]", security?.defenderRealtime ? "text-success" : "text-critical")}>
-                {yesNo(security?.defenderRealtime ?? null)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Antivirus enabled</span>
-              <span className="font-mono text-[11px] text-foreground">{yesNo(security?.defenderAntivirus ?? null)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Antispyware enabled</span>
-              <span className="font-mono text-[11px] text-foreground">{yesNo(security?.defenderAntispyware ?? null)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Signature last updated</span>
-              <span className="font-mono text-[11px] text-foreground">
-                {security?.defenderSignatureLastUpdated
-                  ? formatDateTime(parseIso(security.defenderSignatureLastUpdated))
-                  : "—"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Quick scan age (days)</span>
-              <span className="font-mono text-[11px] text-foreground">{numberOrDash(security?.defenderQuickScanAge ?? null)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Full scan age (days)</span>
-              <span className="font-mono text-[11px] text-foreground">{numberOrDash(security?.defenderFullScanAge ?? null)}</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Secure Boot</span>
-              <span className="font-mono text-[11px] text-foreground">{yesNo(security?.secureBoot ?? null)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">TPM present / ready</span>
-              <span className="font-mono text-[11px] text-foreground">
-                {yesNo(security?.tpmPresent ?? null)} / {yesNo(security?.tpmReady ?? null)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">UAC enabled</span>
-              <span className="font-mono text-[11px] text-foreground">{yesNo(security?.uacEnabled ?? null)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Pending reboot</span>
-              <span className={cn("font-mono text-[11px]", security?.pendingReboot ? "text-warning" : "text-foreground")}>
-                {security?.pendingReboot ? "Yes" : "No"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Activation</span>
-              <span className="font-mono text-[11px] text-foreground">
-                {snapshot.activation?.status === 1 ? "Licensed" : snapshot.activation ? `Status ${snapshot.activation.status}` : "—"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium text-muted-foreground">Last boot</span>
-              <span className="font-mono text-[11px] text-foreground">
-                {formatDateTime(parseIso(os?.lastBoot ?? null))}
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {snapshot.storage.length > 0 ? (
+      {showAll && snapshot.storage.length > 0 ? (
         <section className="flex flex-col gap-3">
           <h2 className="text-[13px] font-medium text-foreground">Storage health</h2>
           <div className="overflow-x-auto border border-border">
@@ -372,12 +242,22 @@ export function Logs() {
                 {snapshot.storage.map((disk, index) => (
                   <tr key={index} className="border-t border-border-subtle">
                     <td className="px-4 py-2">
-                      <span className="block text-[11px] font-medium text-foreground">{disk.friendlyName ?? "—"}</span>
+                      <span className="block truncate text-[11px] font-medium text-foreground" title={disk.friendlyName ?? undefined}>{disk.friendlyName ?? "—"}</span>
                       <span className="block text-[10px] text-muted-foreground">
                         {disk.mediaType === 4 ? "SSD" : disk.mediaType === 3 ? "HDD" : "Unknown"} · {disk.busType ?? "—"}
                       </span>
                     </td>
-                    <td className="px-3 py-2"><StorageHealthBadge disk={disk} /></td>
+                    <td className="px-3 py-2">
+                      {disk.smartPredictFailure === true ? (
+                        <Badge icon={<WarningIcon size={10} weight="fill" />} tone="critical">SMART warning</Badge>
+                      ) : disk.healthStatus !== null && disk.healthStatus !== 0 ? (
+                        <Badge icon={<WarningIcon size={10} weight="fill" />} tone="warning">Degraded</Badge>
+                      ) : disk.healthStatus === 0 ? (
+                        <Badge icon={<CheckCircleIcon size={10} weight="fill" />} tone="success">Healthy</Badge>
+                      ) : (
+                        <Badge icon={<WarningIcon size={10} weight="fill" />} tone="muted">Unknown</Badge>
+                      )}
+                    </td>
                     <td className="px-3 py-2 font-mono text-[11px] text-foreground">
                       {disk.temperature !== null ? `${disk.temperature}°C` : "—"}
                     </td>
@@ -409,8 +289,8 @@ export function Logs() {
         </section>
       ) : null}
 
-      {snapshot.deviceProblems.length > 0 ? (
-        <section className="flex flex-col gap-3">
+      {(view === "devices" || showAll) && snapshot.deviceProblems.length > 0 ? (
+        <section ref={devicesRef} className="flex flex-col gap-3">
           <h2 className="text-[13px] font-medium text-foreground">Devices with problems</h2>
           <div className="overflow-x-auto border border-border">
             <table className="w-full min-w-[40rem] table-fixed border-collapse text-left">
@@ -423,51 +303,134 @@ export function Logs() {
                 </tr>
               </thead>
               <tbody>
-                {snapshot.deviceProblems.map((device, index) => (
+                {snapshot.deviceProblems.slice(devicesPage * 10, devicesPage * 10 + 10).map((device, index) => (
                   <tr key={index} className="border-t border-border-subtle">
-                    <td className="px-4 py-2 text-[11px] font-medium text-foreground">{device.name ?? "—"}</td>
-                    <td className="px-3 py-2 text-[11px] text-muted-foreground">{device.manufacturer ?? "—"}</td>
+                    <td className="px-4 py-2 text-[11px] font-medium text-foreground">
+                      <span className="block truncate" title={device.name ?? undefined}>{device.name ?? "—"}</span>
+                    </td>
+                    <td className="px-3 py-2 text-[11px] text-muted-foreground">
+                      <span className="block truncate" title={device.manufacturer ?? undefined}>{device.manufacturer ?? "—"}</span>
+                    </td>
                     <td className="px-3 py-2 font-mono text-[11px] text-critical">{device.errorCode ?? "—"}</td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground break-all">{device.deviceId ?? "—"}</td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                      <span className="block truncate" title={device.deviceId ?? undefined}>{device.deviceId ?? "—"}</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {snapshot.deviceProblems.length > 10 ? (
+            <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+              <span>
+                Page {devicesPage + 1} of {Math.max(1, Math.ceil(snapshot.deviceProblems.length / 10))}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={devicesPage === 0}
+                  onClick={() => setDevicesPage((p) => Math.max(0, p - 1))}
+                  className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                >
+                  <CaretDoubleLeftIcon size={12} weight="fill" aria-hidden={true} />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  disabled={devicesPage >= Math.ceil(snapshot.deviceProblems.length / 10) - 1}
+                  onClick={() => setDevicesPage((p) => p + 1)}
+                  className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                >
+                  Next
+                  <CaretDoubleRightIcon size={12} weight="fill" aria-hidden={true} />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
-      {snapshot.reliability.length > 0 ? (
-        <section className="flex flex-col gap-3">
+      {(view === "reliability" || showAll) && snapshot.reliability.length > 0 ? (
+        <section ref={reliabilityRef} className="flex flex-col gap-3">
           <h2 className="text-[13px] font-medium text-foreground">Reliability records</h2>
           <div className="overflow-x-auto border border-border">
             <table className="w-full min-w-[40rem] table-fixed border-collapse text-left">
               <thead>
                 <tr className="text-[10px] font-medium text-muted-foreground">
-                  <th className="w-40 px-4 py-2 font-medium">When</th>
-                  <th className="w-44 px-3 py-2 font-medium">Product</th>
+                  <th className="w-64 px-4 py-2 font-medium">Product</th>
                   <th className="px-3 py-2 font-medium">Message</th>
                 </tr>
               </thead>
               <tbody>
-                {snapshot.reliability.slice(0, 25).map((record, index) => (
+                {snapshot.reliability.slice(reliabilityPage * 10, reliabilityPage * 10 + 10).map((record, index) => (
                   <tr key={index} className="border-t border-border-subtle">
-                    <td className="px-4 py-2 font-mono text-[11px] tabular-nums text-foreground">
-                      {formatDateTime(parseIso(record.time))}
+                    <td className="px-4 py-2">
+                      <span className="block truncate text-[11px] font-medium text-foreground" title={record.productName ?? undefined}>
+                        {record.productName ?? "—"}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3",
+                            /crash|fail|error|stop/i.test(record.message ?? "") ? "text-critical" : "text-warning",
+                          )}
+                        >
+                          {/crash|fail|error|stop/i.test(record.message ?? "") ? (
+                            <XCircleIcon size={10} weight="fill" />
+                          ) : (
+                            <WarningIcon size={10} weight="fill" />
+                          )}
+                          {/crash|fail|error|stop/i.test(record.message ?? "") ? "Crash" : "Failed"}
+                        </span>
+                        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                          {formatRelative(parseIso(record.time))}
+                        </span>
+                      </span>
                     </td>
-                    <td className="px-3 py-2 text-[11px] text-foreground">{record.productName ?? "—"}</td>
-                    <td className="px-3 py-2 text-[11px] text-muted-foreground">{record.message ?? "—"}</td>
+                    <td className="px-3 py-2 text-[11px] text-muted-foreground">
+                      <span className="block truncate" title={record.message ?? undefined}>
+                        {record.message ?? "—"}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {snapshot.reliability.length > 10 ? (
+            <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+              <span>
+                Page {reliabilityPage + 1} of {Math.max(1, Math.ceil(snapshot.reliability.length / 10))}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={reliabilityPage === 0}
+                  onClick={() => setReliabilityPage((p) => Math.max(0, p - 1))}
+                  className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                >
+                  <CaretDoubleLeftIcon size={12} weight="fill" aria-hidden={true} />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  disabled={reliabilityPage >= Math.ceil(snapshot.reliability.length / 10) - 1}
+                  onClick={() => setReliabilityPage((p) => p + 1)}
+                  className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                >
+                  Next
+                  <CaretDoubleRightIcon size={12} weight="fill" aria-hidden={true} />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[13px] font-medium text-foreground">Event timeline</h2>
+      {(view === "events" || showAll) ? (
+        <section ref={eventsRef} className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[13px] font-medium text-foreground">Event timeline</h2>
           <span className="font-mono text-[10px] text-muted-foreground">
             {filteredEvents.length} of {snapshot.events.length}
           </span>
@@ -494,37 +457,94 @@ export function Logs() {
             No events in this category.
           </div>
         ) : (
-          <div className="overflow-x-auto border border-border">
-            <table className="w-full min-w-[52rem] table-fixed border-collapse text-left">
-              <thead>
-                <tr className="text-[10px] font-medium text-muted-foreground">
-                  <th className="w-40 px-4 py-2 font-medium">When</th>
-                  <th className="w-24 px-3 py-2 font-medium">Level</th>
-                  <th className="w-24 px-3 py-2 font-medium">Category</th>
-                  <th className="px-3 py-2 font-medium">Event</th>
-                  <th className="w-40 px-3 py-2 font-medium">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEvents.slice(0, 200).map((event, index) => (
-                  <tr key={index} className="border-t border-border-subtle">
-                    <td className="px-4 py-2 font-mono text-[11px] tabular-nums text-foreground">
-                      {formatDateTime(event.time)}
-                    </td>
-                    <td className="px-3 py-2 text-[11px] text-foreground">{event.level}</td>
-                    <td className="px-3 py-2 text-[11px] text-muted-foreground">{event.category}</td>
-                    <td className="px-3 py-2 text-[11px] text-foreground">{event.headline}</td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
-                      {event.provider} · {event.eventId}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto border border-border">
+                <table className="w-full min-w-[52rem] table-fixed border-collapse text-left">
+                  <thead>
+                    <tr className="text-[10px] font-medium text-muted-foreground">
+                      <th className="w-40 px-4 py-2 font-medium">When</th>
+                      <th className="w-24 px-3 py-2 font-medium">Level</th>
+                      <th className="w-24 px-3 py-2 font-medium">Category</th>
+                      <th className="px-3 py-2 font-medium">Event</th>
+                      <th className="w-40 px-3 py-2 font-medium">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEvents.slice(eventsPage * 10, eventsPage * 10 + 10).map((event, index) => (
+                      <tr key={index} className="border-t border-border-subtle">
+                        <td className="px-4 py-2">
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3",
+                                event.level === "Critical" || event.level === "Error"
+                                  ? "text-critical"
+                                  : event.level === "Warning"
+                                    ? "text-warning"
+                                    : "text-success",
+                              )}
+                            >
+                              {event.level === "Critical" || event.level === "Error" ? (
+                                <XCircleIcon size={10} weight="fill" />
+                              ) : event.level === "Warning" ? (
+                                <WarningIcon size={10} weight="fill" />
+                              ) : (
+                                <CheckCircleIcon size={10} weight="fill" />
+                              )}
+                              {event.level}
+                            </span>
+                            <span className="font-mono text-[11px] tabular-nums text-foreground">
+                              {formatDateTime(event.time)}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-[11px] text-foreground">{event.level}</td>
+                        <td className="px-3 py-2 text-[11px] text-muted-foreground">{event.category}</td>
+                        <td className="px-3 py-2 text-[11px] text-foreground">
+                        <span className="block truncate" title={event.headline}>{event.headline}</span>
+                      </td>
+                        <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                          {event.provider} · {event.eventId}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            {filteredEvents.length > 10 ? (
+              <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                <span>
+                  Page {eventsPage + 1} of {Math.max(1, Math.ceil(filteredEvents.length / 10))}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={eventsPage === 0}
+                    onClick={() => setEventsPage((p) => Math.max(0, p - 1))}
+                    className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  >
+                    <CaretDoubleLeftIcon size={12} weight="fill" aria-hidden={true} />
+                    <CaretDoubleLeftIcon size={12} weight="fill" aria-hidden={true} />
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={eventsPage >= Math.ceil(filteredEvents.length / 10) - 1}
+                    onClick={() => setEventsPage((p) => p + 1)}
+                    className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  >
+                    Next
+                    <CaretDoubleRightIcon size={12} weight="fill" aria-hidden={true} />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
+      ) : null}
 
+      {showAll ? (
       <section className="flex flex-col gap-3">
         <button
           type="button"
@@ -536,49 +556,89 @@ export function Logs() {
         </button>
         {softwareOpen ? (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="overflow-x-auto border border-border">
-              <table className="w-full min-w-[28rem] table-fixed border-collapse text-left">
-                <thead>
-                  <tr className="text-[10px] font-medium text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Version</th>
-                    <th className="px-3 py-2 font-medium">Publisher</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.software.slice(0, 100).map((app, index) => (
-                    <tr key={index} className="border-t border-border-subtle">
-                      <td className="px-4 py-2 text-[11px] text-foreground">{app.name ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">{app.version ?? "—"}</td>
-                      <td className="px-3 py-2 text-[10px] text-muted-foreground">{app.publisher ?? "—"}</td>
+            <div className="flex flex-col gap-2">
+              <div className="overflow-x-auto border border-border">
+                <table className="w-full min-w-[28rem] table-fixed border-collapse text-left">
+                  <thead>
+                    <tr className="text-[10px] font-medium text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">Name</th>
+                      <th className="px-3 py-2 font-medium">Version</th>
+                      <th className="px-3 py-2 font-medium">Publisher</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {snapshot.software.slice(softwarePage * 10, softwarePage * 10 + 10).map((app, index) => (
+                      <tr key={index} className="border-t border-border-subtle">
+                        <td className="px-4 py-2 text-[11px] text-foreground">
+                          <span className="block truncate" title={app.name ?? undefined}>{app.name ?? "—"}</span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">{app.version ?? "—"}</td>
+                        <td className="px-3 py-2 text-[10px] text-muted-foreground">
+                          <span className="block truncate" title={app.publisher ?? undefined}>{app.publisher ?? "—"}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {snapshot.software.length > 10 ? (
+                <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                  <span>
+                    Page {softwarePage + 1} of {Math.max(1, Math.ceil(snapshot.software.length / 10))}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={softwarePage === 0}
+                      onClick={() => setSoftwarePage((p) => Math.max(0, p - 1))}
+                      className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                    >
+                      <CaretDoubleLeftIcon size={12} weight="fill" aria-hidden={true} />
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      disabled={softwarePage >= Math.ceil(snapshot.software.length / 10) - 1}
+                      onClick={() => setSoftwarePage((p) => p + 1)}
+                      className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
+                    >
+                      Next
+                      <CaretDoubleRightIcon size={12} weight="fill" aria-hidden={true} />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
-            <div className="overflow-x-auto border border-border">
-              <table className="w-full min-w-[28rem] table-fixed border-collapse text-left">
-                <thead>
-                  <tr className="text-[10px] font-medium text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Device</th>
-                    <th className="px-3 py-2 font-medium">Version</th>
-                    <th className="px-3 py-2 font-medium">Signer</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.drivers.slice(0, 100).map((driver, index) => (
-                    <tr key={index} className="border-t border-border-subtle">
-                      <td className="px-4 py-2 text-[11px] text-foreground">{driver.deviceName ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">{driver.driverVersion ?? "—"}</td>
-                      <td className="px-3 py-2 text-[10px] text-muted-foreground">{driver.signer ?? "—"}</td>
+            <div className="flex flex-col gap-2">
+              <div className="overflow-x-auto border border-border">
+                <table className="w-full min-w-[28rem] table-fixed border-collapse text-left">
+                  <thead>
+                    <tr className="text-[10px] font-medium text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">Device</th>
+                      <th className="px-3 py-2 font-medium">Version</th>
+                      <th className="px-3 py-2 font-medium">Signer</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {snapshot.drivers.slice(softwarePage * 10, softwarePage * 10 + 10).map((driver, index) => (
+                      <tr key={index} className="border-t border-border-subtle">
+                        <td className="px-4 py-2 text-[11px] text-foreground">
+                          <span className="block truncate" title={driver.deviceName ?? undefined}>{driver.deviceName ?? "—"}</span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">{driver.driverVersion ?? "—"}</td>
+                        <td className="px-3 py-2 text-[10px] text-muted-foreground">
+                          <span className="block truncate" title={driver.signer ?? undefined}>{driver.signer ?? "—"}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         ) : null}
       </section>
+      ) : null}
 
       <div className="flex justify-end">
         <Button variant="quiet" onClick={refresh}>

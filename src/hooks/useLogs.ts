@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import useSWR from "swr";
 
+import { preloadCache } from "@/lib/preloadCache";
 import type { LogsBitlockerVolume, LogsSnapshot } from "@/types/logs";
 
 type Status = "loading" | "ready" | "error";
@@ -19,12 +20,18 @@ export function useLogs() {
     error,
     isLoading,
     mutate: mutateSnapshot,
-  } = useSWR<LogsSnapshot>("logs_snapshot", () => invoke<LogsSnapshot>("logs_snapshot"), swrOptions);
+  } = useSWR<LogsSnapshot>("logs_snapshot", () => invoke<LogsSnapshot>("logs_snapshot"), {
+    ...swrOptions,
+    fallbackData: preloadCache.logsSnapshot ?? undefined,
+  });
 
   const { data: bitlocker, mutate: mutateBitlocker } = useSWR<LogsBitlockerVolume[]>(
     "logs_bitlocker",
     () => invoke<LogsBitlockerVolume[]>("logs_bitlocker"),
-    swrOptions,
+    {
+      ...swrOptions,
+      fallbackData: preloadCache.logsBitlocker ?? undefined,
+    },
   );
 
   const merged = useMemo<LogsSnapshot | null>(() => {

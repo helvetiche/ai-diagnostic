@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useShellStats } from "@/hooks/useShellStats";
 import { formatBytes, formatPercent } from "@/lib/format";
-import { NAV_ITEMS, type ScreenId } from "@/lib/navigation";
+import { NAV_ITEMS, type NavChild, type ScreenId } from "@/lib/navigation";
+import { setPendingLogSection } from "@/lib/logSection";
 import { cn } from "@/lib/utils";
 
 const toKb = (value: number) => `${(Math.max(value, 0) / 1024).toFixed(2)}kb`;
@@ -63,6 +65,8 @@ export function TopBar({
   active: ScreenId;
   onSelect: (screen: ScreenId) => void;
 }) {
+  const [open, setOpen] = useState<string | null>(null);
+
   return (
     <header className="glass-bar sticky top-0 z-30">
       <div className="mx-auto flex h-[40px] w-full max-w-[1080px] items-center gap-4 pl-0 pr-4 sm:gap-6 sm:pr-6">
@@ -71,6 +75,68 @@ export function TopBar({
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const current = active === item.id;
+              const hasChildren = !!item.children?.length;
+              const isOpen = open === item.id;
+
+              if (hasChildren) {
+                return (
+                  <li
+                    key={item.id}
+                    className="relative flex"
+                    onMouseEnter={() => setOpen(item.id)}
+                    onMouseLeave={() => setOpen(null)}
+                  >
+                    <button
+                      type="button"
+                      title={item.label}
+                      aria-expanded={isOpen}
+                      onClick={() => setOpen((value) => (value === item.id ? null : item.id))}
+                      className={cn(
+                        "flex h-full w-[6.5rem] items-center justify-center gap-1.5 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase whitespace-nowrap transition-colors duration-[120ms] ease-soft sm:w-[7.5rem]",
+                        "text-muted-foreground hover:bg-surface-muted/60 hover:text-foreground",
+                      )}
+                    >
+                      <Icon size={13} weight="fill" aria-hidden={true} />
+                      <span className="max-sm:sr-only">{item.label}</span>
+                    </button>
+                    <div
+                      className={cn(
+                        "absolute left-0 top-full z-40 min-w-[12rem] border border-border bg-surface shadow-card transition-all duration-160 ease-soft",
+                        isOpen
+                          ? "pointer-events-auto translate-y-0 opacity-100"
+                          : "pointer-events-none -translate-y-1 opacity-0",
+                      )}
+                    >
+                      <ul className="flex flex-col">
+                        {item.children?.map((child: NavChild) => {
+                          const ChildIcon = child.icon;
+                          return (
+                          <li key={child.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (child.section) {
+                                  setPendingLogSection(child.section);
+                                }
+                                onSelect(child.id);
+                                setOpen(null);
+                              }}
+                              className={cn(
+                                "flex w-full items-center gap-2 px-4 py-2 text-left font-mono text-[11px] transition-colors duration-[120ms] ease-soft hover:bg-surface-muted",
+                                active === child.id ? "text-foreground" : "text-muted-foreground",
+                              )}
+                            >
+                              {ChildIcon ? <ChildIcon size={13} weight="fill" aria-hidden={true} /> : null}
+                              {child.label}
+                            </button>
+                          </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </li>
+                );
+              }
 
               return (
                 <li key={item.id} className="flex">
@@ -86,7 +152,7 @@ export function TopBar({
                         : "text-muted-foreground hover:bg-surface-muted/60 hover:text-foreground",
                     )}
                   >
-                    <Icon size={13} weight="fill" aria-hidden="true" />
+                    <Icon size={13} weight="fill" aria-hidden={true} />
                     <span className="max-sm:sr-only">{item.label}</span>
                   </button>
                 </li>
