@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-search-index-upsert"
+description = "Enables the memory_search_index_upsert command without any pre-configured scope."
+commands.allow = ["memory_search_index_upsert"]
+
+[[permission]]
+identifier = "deny-memory-search-index-upsert"
+description = "Denies the memory_search_index_upsert command without any pre-configured scope."
+commands.deny = ["memory_search_index_upsert"]

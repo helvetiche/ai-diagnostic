@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-logs-snapshot"
+description = "Enables the logs_snapshot command without any pre-configured scope."
+commands.allow = ["logs_snapshot"]
+
+[[permission]]
+identifier = "deny-logs-snapshot"
+description = "Denies the logs_snapshot command without any pre-configured scope."
+commands.deny = ["logs_snapshot"]

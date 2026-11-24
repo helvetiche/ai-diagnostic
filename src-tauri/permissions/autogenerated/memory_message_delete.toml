@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-message-delete"
+description = "Enables the memory_message_delete command without any pre-configured scope."
+commands.allow = ["memory_message_delete"]
+
+[[permission]]
+identifier = "deny-memory-message-delete"
+description = "Denies the memory_message_delete command without any pre-configured scope."
+commands.deny = ["memory_message_delete"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-fact-upsert"
+description = "Enables the memory_fact_upsert command without any pre-configured scope."
+commands.allow = ["memory_fact_upsert"]
+
+[[permission]]
+identifier = "deny-memory-fact-upsert"
+description = "Denies the memory_fact_upsert command without any pre-configured scope."
+commands.deny = ["memory_fact_upsert"]

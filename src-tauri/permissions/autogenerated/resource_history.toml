@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resource-history"
+description = "Enables the resource_history command without any pre-configured scope."
+commands.allow = ["resource_history"]
+
+[[permission]]
+identifier = "deny-resource-history"
+description = "Denies the resource_history command without any pre-configured scope."
+commands.deny = ["resource_history"]

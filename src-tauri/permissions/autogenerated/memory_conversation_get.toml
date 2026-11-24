@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-conversation-get"
+description = "Enables the memory_conversation_get command without any pre-configured scope."
+commands.allow = ["memory_conversation_get"]
+
+[[permission]]
+identifier = "deny-memory-conversation-get"
+description = "Denies the memory_conversation_get command without any pre-configured scope."
+commands.deny = ["memory_conversation_get"]

@@ -1,16 +1,21 @@
 import {
   ArrowClockwiseIcon,
   CaretDoubleLeftIcon,
+  ChatTextIcon,
   CaretDoubleRightIcon,
   CheckCircleIcon,
   ClockIcon,
   ListBulletsIcon,
   LightningIcon,
+  MagnifyingGlassIcon,
   MoonIcon,
   PowerIcon,
   PulseIcon,
+  WarningIcon,
+  XCircleIcon,
+  XIcon,
 } from "@phosphor-icons/react";
-import { Fragment, useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/primitives/Button";
 import { Meter } from "@/components/primitives/Meter";
@@ -18,8 +23,9 @@ import { Panel } from "@/components/primitives/Panel";
 
 import { Skeleton } from "@/components/primitives/Skeleton";
 import { StateView } from "@/components/primitives/StateView";
-import { StatusMark, type MarkTone } from "@/components/primitives/StatusMark";
+import type { MarkTone } from "@/components/primitives/StatusMark";
 import { usePowerHistory } from "@/hooks/usePowerHistory";
+import BorderGlow from "@/components/BorderGlow";
 import { formatDateTime, formatUptime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PowerRecord } from "@/types/power";
@@ -216,13 +222,14 @@ function RecordTable({
   records,
   emptyTitle,
   pageSize,
+  onSelect,
 }: {
   label: string;
   records: PowerRecord[];
   emptyTitle: string;
   pageSize?: number;
+  onSelect?: (record: PowerRecord) => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -248,79 +255,83 @@ function RecordTable({
         <thead>
           <tr className="text-[10px] font-medium text-muted-foreground">
             <th scope="col" className="w-[12.5rem] px-4 py-2 font-medium">
-              When
+              <span className="inline-flex items-center gap-1.5">
+                <ClockIcon size={11} aria-hidden={true} />
+                When
+              </span>
             </th>
             <th scope="col" className="w-[10rem] px-3 py-2 font-medium">
-              Type
+              <span className="inline-flex items-center gap-1.5">
+                <PowerIcon size={11} aria-hidden={true} />
+                Type
+              </span>
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
-              Event
-            </th>
-            <th scope="col" className="w-20 px-3 py-2 text-right font-medium">
-              <span className="sr-only">Details</span>
+              <span className="inline-flex items-center gap-1.5">
+                <ChatTextIcon size={11} aria-hidden={true} />
+                Event
+              </span>
             </th>
           </tr>
         </thead>
         <tbody>
           {pageRecords.map((record) => {
-            const expanded = expandedId === record.id;
             const qualifier = timeQualifier(record);
-            const detailId = `power-record-detail-${record.id}`;
 
             return (
-              <Fragment key={record.id}>
-                <tr className="border-t border-border-subtle align-middle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted">
-                  <td className="px-4 py-2">
-                    <Timestamp
-                      value={record.time}
-                      className="block font-mono text-[11px] tabular-nums text-foreground"
-                    />
-                    {qualifier ? (
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                        {qualifier}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="block text-[11px] font-medium text-foreground">
-                      {kindLabel(record)}
+              <tr
+                key={record.id}
+                tabIndex={0}
+                onClick={() => onSelect?.(record)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect?.(record);
+                  }
+                }}
+                className="cursor-pointer border-t border-border-subtle align-middle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <td className="px-4 py-2">
+                  <Timestamp
+                    value={record.time}
+                    className="block font-mono text-[11px] tabular-nums text-foreground"
+                  />
+                  {qualifier ? (
+                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                      {qualifier}
                     </span>
-                    <StatusMark
-                      tone={severityTone(record.severity)}
-                      labelTone={record.severity !== "info"}
-                      className="mt-0.5"
-                    >
-                      {severityLabel(record.severity)}
-                    </StatusMark>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="text-[11px] leading-4 font-medium text-foreground">
-                      {record.headline}
-                    </span>
-                  </td>
-                  <td className="px-2 py-0 text-right">
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-controls={detailId}
-                      aria-label={`${expanded ? "Hide" : "View"} details for ${record.headline}`}
-                      onClick={() => setExpandedId(expanded ? null : record.id)}
-                      className="inline-flex min-h-10 items-center px-2 text-[11px] font-medium text-muted-foreground transition-colors duration-[120ms] ease-soft hover:text-foreground"
-                    >
-                      {expanded ? "Hide" : "View"}
-                    </button>
-                  </td>
-                </tr>
-                <tr
-                  id={detailId}
-                  hidden={!expanded}
-                  className="border-t border-border-subtle bg-surface-muted"
-                >
-                  <td colSpan={4} className="px-4 py-4">
-                    {expanded ? <RecordDetail record={record} /> : null}
-                  </td>
-                </tr>
-              </Fragment>
+                  ) : null}
+                </td>
+                <td className="px-3 py-2">
+                  <span className="block text-[11px] font-medium text-foreground">
+                    {kindLabel(record)}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3",
+                      severityTone(record.severity) === "critical"
+                        ? "text-critical"
+                        : severityTone(record.severity) === "warning"
+                          ? "text-warning"
+                          : "text-success",
+                    )}
+                  >
+                    {severityTone(record.severity) === "critical" ? (
+                      <XCircleIcon size={10} weight="fill" />
+                    ) : severityTone(record.severity) === "warning" ? (
+                      <WarningIcon size={10} weight="fill" />
+                    ) : (
+                      <CheckCircleIcon size={10} weight="fill" />
+                    )}
+                    {severityLabel(record.severity)}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <span className="text-[11px] leading-4 font-medium text-foreground">
+                    {record.headline}
+                  </span>
+                </td>
+              </tr>
             );
           })}
         </tbody>
@@ -410,6 +421,17 @@ function PowerSkeleton() {
 export function Power() {
   const { snapshot, status, error, refresh } = usePowerHistory();
   const [activeTab, setActiveTab] = useState<TabKey>("summary");
+  const [selectedPower, setSelectedPower] = useState<PowerRecord | null>(null);
+  const [powerDrawerClosing, setPowerDrawerClosing] = useState(false);
+  const [powerAsk, setPowerAsk] = useState("");
+
+  function closePowerDrawer() {
+    setPowerDrawerClosing(true);
+    window.setTimeout(() => {
+      setSelectedPower(null);
+      setPowerDrawerClosing(false);
+    }, 240);
+  }
 
   const powerStatus =
     !snapshot || snapshot.uptimeSeconds === null
@@ -644,6 +666,10 @@ export function Power() {
             ].filter((record) => record.isStop && record.severity === "critical")}
             emptyTitle="No critical stops recorded"
             pageSize={5}
+            onSelect={(record) => {
+              setPowerDrawerClosing(false);
+              setSelectedPower(record);
+            }}
           />
         ) : (
           <section className="border border-border p-4 text-[11px] text-muted-foreground">
@@ -668,6 +694,10 @@ export function Power() {
           label="Shutdown records"
           records={snapshot.shutdowns}
           emptyTitle="No shutdowns recorded"
+          onSelect={(record) => {
+            setPowerDrawerClosing(false);
+            setSelectedPower(record);
+          }}
         />
         {snapshot.unclassifiedStops.length > 0 ? (
           <div className="mt-2 flex flex-col gap-3">
@@ -678,6 +708,10 @@ export function Power() {
               label="Clean stops without a request"
               records={snapshot.unclassifiedStops}
               emptyTitle="No clean stops without a request"
+              onSelect={(record) => {
+                setPowerDrawerClosing(false);
+                setSelectedPower(record);
+              }}
             />
           </div>
         ) : null}
@@ -694,6 +728,10 @@ export function Power() {
           label="Restart records"
           records={snapshot.restarts}
           emptyTitle="No restarts recorded"
+          onSelect={(record) => {
+            setPowerDrawerClosing(false);
+            setSelectedPower(record);
+          }}
         />
       </div>
 
@@ -708,8 +746,67 @@ export function Power() {
           label="Power-off records"
           records={snapshot.powerOffs}
           emptyTitle="No unexpected stops recorded"
+          onSelect={(record) => {
+            setPowerDrawerClosing(false);
+            setSelectedPower(record);
+          }}
         />
       </div>
+
+      {selectedPower ? (
+        <>
+          <div
+            className={cn(
+              "fixed inset-0 z-40 bg-background/60 duration-240",
+              powerDrawerClosing ? "animate-out fade-out" : "animate-in fade-in",
+            )}
+            onClick={closePowerDrawer}
+            aria-hidden={true}
+          />
+          <aside
+            className={cn(
+              "fixed inset-y-0 right-0 z-50 h-screen w-1/2 overflow-x-hidden overflow-y-auto overscroll-contain border-l border-border bg-surface p-6 shadow-card duration-240",
+              powerDrawerClosing
+                ? "animate-out fade-out slide-out-to-right-full"
+                : "animate-in fade-in slide-in-from-right-full",
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[13px] font-medium text-foreground">Power record</h2>
+              <button
+                type="button"
+                onClick={closePowerDrawer}
+                className="text-muted-foreground transition-colors duration-[120ms] ease-soft hover:text-foreground"
+                aria-label="Close"
+              >
+                <XIcon size={14} weight="fill" aria-hidden={true} />
+              </button>
+            </div>
+            <div className="mt-4">
+              <BorderGlow borderRadius={0}>
+                <div className="relative flex items-center">
+                  <MagnifyingGlassIcon
+                    size={13}
+                    className="pointer-events-none absolute left-3 text-muted-foreground"
+                    aria-hidden={true}
+                  />
+                  <input
+                    type="search"
+                    value={powerAsk}
+                    onChange={(event) => setPowerAsk(event.target.value)}
+                    placeholder="Ask AI"
+                    aria-label="Ask AI"
+                    className="w-full bg-transparent py-2 pl-9 pr-3 text-[12px] text-white/90 placeholder:text-white/50 focus:outline-none"
+                  />
+                </div>
+              </BorderGlow>
+            </div>
+            <div className="mt-5">
+              <RecordDetail record={selectedPower} />
+            </div>
+          </aside>
+        </>
+      ) : null}
     </Screen>
   );
 }

@@ -1,9 +1,15 @@
 import {
   CaretDoubleLeftIcon,
   CaretDoubleRightIcon,
+  CaretDownIcon,
+  ChatTextIcon,
   CheckCircleIcon,
+  CubeIcon,
+  HashIcon,
+  MagnifyingGlassIcon,
   WarningIcon,
   XCircleIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Screen } from "@/components/layout/Screen";
@@ -12,6 +18,8 @@ import { Panel } from "@/components/primitives/Panel";
 import { Skeleton } from "@/components/primitives/Skeleton";
 import { StateView } from "@/components/primitives/StateView";
 import { useLogs } from "@/hooks/useLogs";
+import type { LogsReliabilityRecord } from "@/types/logs";
+import BorderGlow from "@/components/BorderGlow";
 import { consumePendingLogSection } from "@/lib/logSection";
 import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -108,6 +116,21 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
   const [category, setCategory] = useState<EventCategory>("All");
   const [reliabilitySearch, setReliabilitySearch] = useState("");
   const [reliabilityFilter, setReliabilityFilter] = useState<"All" | "Crash" | "Failed">("All");
+  const [reliabilityFilterOpen, setReliabilityFilterOpen] = useState(false);
+  const [selectedReliability, setSelectedReliability] = useState<LogsReliabilityRecord | null>(null);
+  const [reliabilityDrawerClosing, setReliabilityDrawerClosing] = useState(false);
+  const [cabinetSearch, setCabinetSearch] = useState("");
+  const reliabilitySearchRef = useRef<HTMLInputElement>(null);
+  const reliabilityFilterRef = useRef<HTMLDivElement>(null);
+
+  function closeReliabilityDrawer() {
+    setReliabilityDrawerClosing(true);
+    window.setTimeout(() => {
+      setSelectedReliability(null);
+      setReliabilityDrawerClosing(false);
+    }, 240);
+  }
+
   const [softwareOpen, setSoftwareOpen] = useState(false);
   const [devicesPage, setDevicesPage] = useState(0);
   const [reliabilityPage, setReliabilityPage] = useState(0);
@@ -121,6 +144,29 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
   useEffect(() => {
     setReliabilityPage(0);
   }, [reliabilitySearch, reliabilityFilter]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        if (reliabilitySearchRef.current) {
+          event.preventDefault();
+          reliabilitySearchRef.current.focus();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (reliabilityFilterRef.current && !reliabilityFilterRef.current.contains(event.target as Node)) {
+        setReliabilityFilterOpen(false);
+      }
+    }
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, []);
 
   useEffect(() => {
     const section = consumePendingLogSection();
@@ -352,18 +398,112 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
 
       {(view === "reliability" || showAll) && snapshot.reliability.length > 0 ? (
         <section ref={reliabilityRef} className="flex flex-col gap-3">
-          <h2 className="text-[13px] font-medium text-foreground">Reliability records</h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-[13px] font-medium text-foreground">Reliability records</h2>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {filteredReliability.length} of {snapshot.reliability.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative w-full flex-1">
+              <MagnifyingGlassIcon
+                size={13}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                aria-hidden={true}
+              />
+              <input
+                ref={reliabilitySearchRef}
+                type="search"
+                value={reliabilitySearch}
+                onChange={(event) => setReliabilitySearch(event.target.value)}
+                placeholder="Search product, message, source"
+                className="w-full bg-surface-muted py-2 pl-9 pr-16 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label="Search reliability records"
+              />
+              <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 border border-border bg-surface-raised px-2 py-0.5 font-mono text-[10px] text-muted-foreground shadow-card">
+                Ctrl+F
+              </kbd>
+            </div>
+            <div ref={reliabilityFilterRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setReliabilityFilterOpen((open) => !open)}
+                className="flex items-center gap-2 bg-surface-muted px-3 py-2 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-haspopup="listbox"
+                aria-expanded={reliabilityFilterOpen}
+                aria-label="Filter reliability records"
+              >
+                {reliabilityFilter}
+                <CaretDownIcon size={10} weight="fill" aria-hidden={true} />
+              </button>
+              {reliabilityFilterOpen ? (
+                <ul
+                  role="listbox"
+                  className="absolute right-0 top-full z-10 mt-1 min-w-[8rem] border border-border bg-surface shadow-card"
+                >
+                  {(["All", "Crash", "Failed"] as const).map((option) => (
+                    <li key={option}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={reliabilityFilter === option}
+                        onClick={() => {
+                          setReliabilityFilter(option);
+                          setReliabilityFilterOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[12px] transition-colors duration-[120ms] ease-soft hover:bg-surface-muted",
+                          reliabilityFilter === option ? "text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        {option}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+          {filteredReliability.length === 0 ? (
+            <div className="border border-border p-4 text-[11px] text-muted-foreground">
+              No reliability records match the current search or filter.
+            </div>
+          ) : (
+            <>
           <div className="overflow-x-auto border border-border">
             <table className="w-full min-w-[40rem] table-fixed border-collapse text-left">
               <thead>
                 <tr className="text-[10px] font-medium text-muted-foreground">
-                  <th className="w-64 px-4 py-2 font-medium">Product</th>
-                  <th className="px-3 py-2 font-medium">Message</th>
+                  <th className="w-64 px-4 py-2 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CubeIcon size={11} aria-hidden={true} />
+                      Product
+                    </span>
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <ChatTextIcon size={11} aria-hidden={true} />
+                      Message
+                    </span>
+                  </th>
+                  <th className="w-28 px-3 py-2 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <HashIcon size={11} aria-hidden={true} />
+                      Identifier
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {snapshot.reliability.slice(reliabilityPage * 10, reliabilityPage * 10 + 10).map((record, index) => (
-                  <tr key={index} className="border-t border-border-subtle">
+                {filteredReliability.slice(reliabilityPage * 10, reliabilityPage * 10 + 10).map((record, index) => (
+                  <tr
+                    key={index}
+                    className="cursor-pointer border-t border-border-subtle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted"
+                    onClick={() => {
+                      setReliabilityDrawerClosing(false);
+                      setSelectedReliability(record);
+                    }}
+                  >
                     <td className="px-4 py-2">
                       <span className="block truncate text-[11px] font-medium text-foreground" title={record.productName ?? undefined}>
                         {record.productName ?? "—"}
@@ -392,15 +532,18 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
                         {record.message ?? "—"}
                       </span>
                     </td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                      {record.eventIdentifier ?? "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {snapshot.reliability.length > 10 ? (
+          {filteredReliability.length > 10 ? (
             <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
               <span>
-                Page {reliabilityPage + 1} of {Math.max(1, Math.ceil(snapshot.reliability.length / 10))}
+                Page {reliabilityPage + 1} of {Math.max(1, Math.ceil(filteredReliability.length / 10))}
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -414,7 +557,7 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
                 </button>
                 <button
                   type="button"
-                  disabled={reliabilityPage >= Math.ceil(snapshot.reliability.length / 10) - 1}
+                  disabled={reliabilityPage >= Math.ceil(filteredReliability.length / 10) - 1}
                   onClick={() => setReliabilityPage((p) => p + 1)}
                   className="inline-flex items-center gap-1.5 border border-border-subtle bg-surface-muted px-3 py-1.5 font-medium text-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface disabled:cursor-not-allowed disabled:text-muted-foreground"
                 >
@@ -424,6 +567,8 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
               </div>
             </div>
           ) : null}
+            </>
+          )}
         </section>
       ) : null}
 
@@ -645,6 +790,86 @@ export function Logs({ view = "all" }: { view?: "all" | "reliability" | "events"
           Refresh
         </Button>
       </div>
+
+      {selectedReliability ? (
+        <>
+          <div
+            className={cn(
+              "fixed inset-0 z-40 bg-background/60 duration-240",
+              reliabilityDrawerClosing ? "animate-out fade-out" : "animate-in fade-in",
+            )}
+            onClick={closeReliabilityDrawer}
+            aria-hidden={true}
+          />
+          <aside
+            className={cn(
+              "fixed inset-y-0 right-0 z-50 h-screen w-1/2 overflow-x-hidden overflow-y-auto overscroll-contain border-l border-border bg-surface p-6 shadow-card duration-240",
+              reliabilityDrawerClosing
+                ? "animate-out fade-out slide-out-to-right-full"
+                : "animate-in fade-in slide-in-from-right-full",
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[13px] font-medium text-foreground">Reliability record</h2>
+              <button
+                type="button"
+                onClick={closeReliabilityDrawer}
+                className="text-muted-foreground transition-colors duration-[120ms] ease-soft hover:text-foreground"
+                aria-label="Close"
+              >
+                <XIcon size={14} weight="fill" aria-hidden={true} />
+              </button>
+            </div>
+            <div className="mt-4">
+              <BorderGlow
+                backgroundColor="#120F17"
+                borderRadius={0}
+                glowRadius={16}
+                glowIntensity={0.8}
+              >
+                <div className="relative flex items-center">
+                  <MagnifyingGlassIcon
+                    size={13}
+                    className="pointer-events-none absolute left-3 text-muted-foreground"
+                    aria-hidden={true}
+                  />
+                  <input
+                    type="search"
+                    value={cabinetSearch}
+                    onChange={(event) => setCabinetSearch(event.target.value)}
+                    placeholder="Ask AI"
+                    aria-label="Ask AI"
+                    className="w-full bg-transparent py-2 pl-9 pr-3 text-[12px] text-white/90 placeholder:text-white/50 focus:outline-none"
+                  />
+                </div>
+              </BorderGlow>
+            </div>
+            <dl className="mt-5 flex flex-col gap-3 text-[12px]">
+              <div>
+                <dt className="text-[10px] font-medium text-muted-foreground">Product</dt>
+                <dd className="mt-1 text-foreground">{selectedReliability.productName ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-medium text-muted-foreground">Message</dt>
+                <dd className="mt-1 text-foreground">{selectedReliability.message ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-medium text-muted-foreground">Time</dt>
+                <dd className="mt-1 font-mono text-foreground">{selectedReliability.time ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-medium text-muted-foreground">Source</dt>
+                <dd className="mt-1 text-foreground">{selectedReliability.sourceName ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-medium text-muted-foreground">Event identifier</dt>
+                <dd className="mt-1 font-mono text-foreground">{selectedReliability.eventIdentifier ?? "—"}</dd>
+              </div>
+            </dl>
+          </aside>
+        </>
+      ) : null}
+
     </Screen>
   );
 }

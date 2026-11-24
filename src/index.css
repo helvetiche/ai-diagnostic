@@ -497,8 +497,187 @@
   }
 }
 
+/*
+ * `backwards`, not `both`: a retained `transform` (even `translateY(0)`) makes
+ * this element the containing block for fixed descendants, which broke the
+ * full-height drawers and made them scroll with the page.
+ */
 .screen-enter {
-  animation: screen-in 240ms var(--ease-soft) both;
+  animation: screen-in 240ms var(--ease-soft) backwards;
+}
+
+/*
+ * AI entry: one accent gradient feeds both the sparkle mask and the label.
+ * The highlight is a lightened `--primary`, so it stays visible on light and
+ * dark bars. Shared by `.ai-sparkle` and `.ai-label` through the button.
+ */
+.ai-control,
+.ask-ai-panel {
+  --ai-gradient: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    color-mix(in srgb, var(--primary) 30%, #fff) 50%,
+    var(--primary) 100%
+  );
+}
+
+/*
+ * Ask AI sheet: two slow, offset spotlight orbits over the frosted surface.
+ * Incommensurate durations (19s / 27s) keep the pairing from reading as a loop.
+ */
+.ask-ai-panel {
+  isolation: isolate;
+}
+
+.ask-ai-spotlights {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ask-ai-spotlights::before,
+.ask-ai-spotlights::after {
+  content: "";
+  position: absolute;
+  width: 60%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(48px);
+  will-change: transform, opacity;
+}
+
+.ask-ai-spotlights::before {
+  top: -20%;
+  left: -20%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 42%, transparent) 0%, transparent 70%);
+  animation: ai-spotlight-a 19s var(--ease-soft) infinite alternate;
+}
+
+.ask-ai-spotlights::after {
+  right: -20%;
+  bottom: -30%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--info) 38%, transparent) 0%, transparent 70%);
+  animation: ai-spotlight-b 27s var(--ease-soft) infinite alternate;
+}
+
+/* Corner + edge falloff, tinted with the theme background so it works in both modes. */
+.ask-ai-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 85% 75% at 50% 45%,
+      transparent 35%,
+      color-mix(in srgb, var(--background) 55%, transparent) 100%
+    ),
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--background) 45%, transparent), transparent 45%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--background) 45%, transparent), transparent 45%),
+    radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--background) 45%, transparent), transparent 45%),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--background) 45%, transparent), transparent 45%);
+}
+
+@keyframes ai-spotlight-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.3;
+  }
+  23% {
+    transform: translate3d(70%, 45%, 0) scale(1.25);
+    opacity: 0.55;
+  }
+  47% {
+    transform: translate3d(35%, 95%, 0) scale(0.9);
+    opacity: 0.38;
+  }
+  71% {
+    transform: translate3d(95%, 25%, 0) scale(1.15);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate3d(20%, 70%, 0) scale(1.35);
+    opacity: 0.42;
+  }
+}
+
+@keyframes ai-spotlight-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.1);
+    opacity: 0.42;
+  }
+  19% {
+    transform: translate3d(-75%, -30%, 0) scale(0.85);
+    opacity: 0.3;
+  }
+  43% {
+    transform: translate3d(-30%, -85%, 0) scale(1.3);
+    opacity: 0.52;
+  }
+  68% {
+    transform: translate3d(-90%, -65%, 0) scale(1);
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(-45%, -10%, 0) scale(1.2);
+    opacity: 0.48;
+  }
+}
+
+.ai-sparkle {
+  --ai-sparkle-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M208,144a15.78,15.78,0,0,1-10.42,14.94L146,178l-19,51.62a15.92,15.92,0,0,1-29.88,0L78,178l-51.62-19a15.92,15.92,0,0,1,0-29.88L78,110l19-51.62a15.92,15.92,0,0,1,29.88,0L146,110l51.62,19A15.78,15.78,0,0,1,208,144ZM152,48h16V64a8,8,0,0,0,16,0V48h16a8,8,0,0,0,0-16H184V16a8,8,0,0,0-16,0V32H152a8,8,0,0,0,0,16Zm88,32h-8V72a8,8,0,0,0-16,0v8h-8a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0V96h8a8,8,0,0,0,0-16Z'/%3E%3C/svg%3E");
+
+  display: inline-block;
+  width: var(--ai-sparkle-size, 16px);
+  height: var(--ai-sparkle-size, 16px);
+  background-image: var(--ai-gradient);
+  -webkit-mask: var(--ai-sparkle-mask) center / contain no-repeat;
+  mask: var(--ai-sparkle-mask) center / contain no-repeat;
+}
+
+.ai-label {
+  background-image: var(--ai-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Free models: a slow, quiet green breath so they stand out without shouting. */
+@keyframes ai-free-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 0 transparent;
+  }
+  50% {
+    opacity: 0.78;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--success) 45%, transparent);
+  }
+}
+
+.ai-free {
+  animation: ai-free-breathe 2.4s var(--ease-soft) infinite;
+}
+
+/* Streaming reply text: each character fades and lifts into place as it lands. */
+@keyframes typewriter-char-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.typewriter-char {
+  display: inline-block;
+  animation: typewriter-char-in 180ms var(--ease-soft) both;
 }
 
 .pop-enter {

@@ -30,6 +30,25 @@
     "allow-get-fast-startup",
     "allow-set-fast-startup",
     "allow-logs-snapshot",
-    "allow-logs-bitlocker"
+    "allow-logs-bitlocker",
+    "allow-memory-conversation-create",
+    "allow-memory-conversation-list",
+    "allow-memory-conversation-get",
+    "allow-memory-conversation-delete",
+    "allow-memory-conversation-archive",
+    "allow-memory-conversation-touch",
+    "allow-memory-message-append",
+    "allow-memory-message-list",
+    "allow-memory-message-delete",
+    "allow-memory-fact-upsert",
+    "allow-memory-fact-list",
+    "allow-memory-fact-delete",
+    "allow-memory-fact-clear",
+    "allow-memory-search-index-upsert",
+    "allow-memory-search-index-delete",
+    "allow-memory-search",
+    "allow-memory-stats",
+    "allow-memory-clear-all",
+    "allow-openrouter-chat"
   ]
 }

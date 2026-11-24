@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-conversation-archive"
+description = "Enables the memory_conversation_archive command without any pre-configured scope."
+commands.allow = ["memory_conversation_archive"]
+
+[[permission]]
+identifier = "deny-memory-conversation-archive"
+description = "Denies the memory_conversation_archive command without any pre-configured scope."
+commands.deny = ["memory_conversation_archive"]

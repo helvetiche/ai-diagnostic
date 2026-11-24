@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-disable-startup-app"
+description = "Enables the disable_startup_app command without any pre-configured scope."
+commands.allow = ["disable_startup_app"]
+
+[[permission]]
+identifier = "deny-disable-startup-app"
+description = "Denies the disable_startup_app command without any pre-configured scope."
+commands.deny = ["disable_startup_app"]

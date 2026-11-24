@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-resource-streaming"
+description = "Enables the set_resource_streaming command without any pre-configured scope."
+commands.allow = ["set_resource_streaming"]
+
+[[permission]]
+identifier = "deny-set-resource-streaming"
+description = "Denies the set_resource_streaming command without any pre-configured scope."
+commands.deny = ["set_resource_streaming"]
