@@ -24,15 +24,14 @@ import {
   type SetStateAction,
 } from "react";
 
-import { MarkdownText } from "@/components/MarkdownText";
+import { TypewriterText } from "@/components/TypewriterText";
 import { SessionDrawer } from "@/components/SessionDrawer";
 import { Button } from "@/components/primitives/Button";
 import { requestChatReply, type ChatTurn } from "@/lib/aiChat";
 import { saveConversationMarkdown } from "@/lib/aiMarkdown";
-import { AI_MEMORY_ENABLED, aiMemory } from "@/lib/aiMemory";
 import { useOpenRouterConfig, type OpenRouterConfig } from "@/lib/openRouterConfig";
 import { cn } from "@/lib/utils";
-import type { AiConversation, AiMessage } from "@/types/aiMemory";
+import type { AiConversation, AiMessage } from "@/types/aiChat";
 
 const SUGGESTIONS = [
   "What is my PC Specifications",
@@ -95,7 +94,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message }: { message: AiMe
         )}
       >
         {message.role === "assistant" ? (
-          <MarkdownText text={message.content} />
+          <TypewriterText text={message.content} stagger={8} className="font-mono" />
         ) : (
           <span className="font-sans whitespace-pre-wrap">{message.content}</span>
         )}
@@ -140,20 +139,20 @@ function makeLocalConversation(): AiConversation {
 }
 
 /**
- * Conversation state hydrates from memory in the background.
- * The drawer renders immediately; memory is never a full-screen gate, and
- * failures fall back to in-memory chat with a warning.
+ * Conversation state lives only in React. There is no memory system, so
+ * opening Ask AI and sending a message never touch SQLite or Tauri.
  */
 function useConversationState() {
-  const loadSeqRef = useRef(0);
-  const [conversations, setConversations] = useState<AiConversation[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const conversationIdRef = useRef<string | null>(null);
+  const [conversations, setConversations] = useState<AiConversation[]>(() => [
+    makeLocalConversation(),
+  ]);
+  const [conversationId, setConversationId] = useState<string | null>(
+    () => conversations[0]?.id ?? null,
+  );
+  const conversationIdRef = useRef<string | null>(conversationId);
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [sending, setSending] = useState(false);
-  const [hydrating, setHydrating] = useState(AI_MEMORY_ENABLED);
   const [error, setError] = useState<string | null>(null);
-  const [memoryWarning, setMemoryWarning] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
 
@@ -166,140 +165,30 @@ function useConversationState() {
     return conversationIdRef.current;
   }
 
-  async function ensureConversation(): Promise<string | null> {
-    if (!AI_MEMORY_ENABLED) {
-      return getActiveConversationId();
-    }
-    const existing = getActiveConversationId();
-    if (existing) {
-      return existing;
-    }
-    try {
-      const conv = await aiMemory.conversationCreate("New chat", "machine");
-      setConversations((prev) => [conv, ...prev]);
-      setActiveConversationId(conv.id);
-      setMemoryWarning(null);
-      return conv.id;
-    } catch {
-      setMemoryWarning("Memory is unavailable. This chat will not be saved.");
-      return null;
-    }
-  }
-
-  async function persistTurn(input: {
-    conversationId: string;
-    userContent: string;
-    assistantContent: string;
-    model?: string;
-    title?: string;
-  }) {
-    if (!AI_MEMORY_ENABLED) return;
-    try {
-      await aiMemory.turnAppend(input);
-    } catch {
-      setMemoryWarning("Reply shown but not saved to memory.");
-    }
-  }
-
-  useEffect(() => {
-    if (!AI_MEMORY_ENABLED) {
-      setHydrating(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await aiMemory.bootstrap({
-          contextKey: "machine",
-          conversationLimit: 50,
-          messageLimit: 200,
-        });
-        if (cancelled) return;
-        setConversations(data.conversations);
-        setActiveConversationId(data.activeConversationId);
-        setMessages(data.messages);
-        setMemoryWarning(null);
-      } catch {
-        if (cancelled) return;
-        setMemoryWarning("Memory is unavailable. This chat will not be saved.");
-      } finally {
-        if (!cancelled) setHydrating(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function activateConversation(id: string) {
-    if (!AI_MEMORY_ENABLED) return;
-    const seq = ++loadSeqRef.current;
+  function activateConversation(id: string) {
     setActiveConversationId(id);
-    setHydrating(true);
-    setError(null);
-    setSaveStatus(null);
-    try {
-      const loaded = await aiMemory.messages(id, 200);
-      if (seq !== loadSeqRef.current) return;
-      setMessages(loaded);
-    } catch {
-      if (seq !== loadSeqRef.current) return;
-      setMessages([]);
-      setMemoryWarning("Could not load that conversation.");
-    } finally {
-      if (seq === loadSeqRef.current) setHydrating(false);
-    }
-  }
-
-  async function newConversation() {
-    const seq = ++loadSeqRef.current;
-    setActiveConversationId(null);
     setMessages([]);
     setError(null);
     setSaveStatus(null);
-    setHydrating(AI_MEMORY_ENABLED);
-
-    if (!AI_MEMORY_ENABLED) {
-      const local = makeLocalConversation();
-      setConversations([local]);
-      setActiveConversationId(local.id);
-      setHydrating(false);
-      return;
-    }
-
-    try {
-      const conv = await aiMemory.conversationCreate("New chat", "machine");
-      if (seq !== loadSeqRef.current) return;
-      setConversations((prev) => [conv, ...prev]);
-      setActiveConversationId(conv.id);
-      setMemoryWarning(null);
-    } catch {
-      if (seq !== loadSeqRef.current) return;
-      const local = makeLocalConversation();
-      setConversations([local]);
-      setActiveConversationId(local.id);
-      setMemoryWarning("Memory is unavailable. This chat will not be saved.");
-    } finally {
-      if (seq === loadSeqRef.current) setHydrating(false);
-    }
   }
 
-  async function deleteConversation(id: string) {
-    if (AI_MEMORY_ENABLED) {
-      try {
-        await aiMemory.conversationDelete(id);
-      } catch {
-        setMemoryWarning("Could not delete that conversation.");
-        return;
-      }
-    }
+  function newConversation() {
+    const conv = makeLocalConversation();
+    setConversations([conv]);
+    setActiveConversationId(conv.id);
+    setMessages([]);
+    setError(null);
+    setSaveStatus(null);
+  }
+
+  function deleteConversation(id: string) {
     const remaining = conversations.filter((conversation) => conversation.id !== id);
     setConversations(remaining);
     if (id === conversationId) {
       if (remaining.length > 0) {
-        await activateConversation(remaining[0].id);
+        activateConversation(remaining[0].id);
       } else {
-        await newConversation();
+        newConversation();
       }
     }
   }
@@ -313,9 +202,7 @@ function useConversationState() {
     conversationId,
     messages,
     sending,
-    hydrating,
     error,
-    memoryWarning,
     saveStatus,
     sessionsOpen,
     setConversations,
@@ -323,8 +210,6 @@ function useConversationState() {
     setError,
     setSending,
     setSessionsOpen,
-    ensureConversation,
-    persistTurn,
     activateConversation,
     newConversation,
     deleteConversation,
@@ -335,7 +220,6 @@ function useConversationState() {
 
 function useChatSubmit({
   config,
-  conversationId,
   messages,
   sending,
   getActiveConversationId,
@@ -345,7 +229,6 @@ function useChatSubmit({
   setSending,
 }: {
   config: OpenRouterConfig;
-  conversationId: string | null;
   messages: AiMessage[];
   sending: boolean;
   getActiveConversationId: () => string | null;
@@ -369,7 +252,7 @@ function useChatSubmit({
 
     const userMessage: AiMessage = {
       id: `local-${Date.now()}-u`,
-      conversationId: conversationId ?? "local",
+      conversationId: getActiveConversationId() ?? "local",
       role: "user",
       content: text,
       model: null,
@@ -378,7 +261,6 @@ function useChatSubmit({
     };
     setMessages((prev) => [...prev, userMessage]);
 
-    // Only user/assistant turns go to the API; the last 20 keep the request small.
     const history: ChatTurn[] = messages
       .slice(-20)
       .filter((message) => message.role === "user" || message.role === "assistant")
@@ -387,10 +269,10 @@ function useChatSubmit({
         content: message.content,
       }));
 
-    const targetConversationId = conversationId;
+    const title = messages.length === 0 ? toTopicTitle(text) : null;
+    const targetConversationId = getActiveConversationId();
 
-    if (targetConversationId && messages.length === 0) {
-      const title = toTopicTitle(text);
+    if (title && targetConversationId) {
       setConversations((prev) =>
         prev.map((conversation) =>
           conversation.id === targetConversationId ? { ...conversation, title } : conversation,
@@ -405,16 +287,16 @@ function useChatSubmit({
         AI_REQUEST_TIMEOUT_MS,
       );
 
-      // The user may have started a new chat while the model was working.
       if (getActiveConversationId() !== targetConversationId) {
         return;
       }
 
+      const content = reply || "(no response)";
       const assistantMessage: AiMessage = {
         id: `local-${Date.now()}-a`,
         conversationId: targetConversationId ?? "local",
         role: "assistant",
-        content: reply || "(no response)",
+        content,
         model: config.model,
         tokens: null,
         createdAt: Date.now(),
@@ -676,7 +558,7 @@ function MessageList({
               role="status"
               aria-live="polite"
             >
-              Waiting for response…
+              <TypewriterText text="Waiting for response…" stagger={40} className="font-mono" />
             </p>
           ) : null}
         </div>
@@ -945,7 +827,6 @@ export function AskAiDrawer({
   const conversation = useConversationState();
   const chat = useChatSubmit({
     config,
-    conversationId: conversation.conversationId,
     messages: conversation.messages,
     sending: conversation.sending,
     getActiveConversationId: conversation.getActiveConversationId,

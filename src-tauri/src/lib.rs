@@ -1,7 +1,6 @@
 mod configure;
 mod llm;
 mod logs;
-mod memory;
 mod network;
 mod power;
 mod resources;
@@ -18,8 +17,6 @@ pub fn run() {
             let thermal_state = Arc::new(thermal::ThermalState::new());
             app.manage(state.clone());
             app.manage(thermal_state.clone());
-            let memory_state = memory::db::open(app.handle())?;
-            app.manage(memory_state);
             resources::spawn_sampler(app.handle().clone(), state.clone());
             thermal::spawn_sampler(app.handle().clone(), thermal_state, state);
             Ok(())
@@ -51,20 +48,6 @@ pub fn run() {
             power::power_history,
             thermal::thermal_history,
             thermal::recheck_thermals,
-            memory::commands::memory_bootstrap,
-            memory::commands::memory_conversation_create,
-            memory::commands::memory_conversation_list,
-            memory::commands::memory_conversation_delete,
-            memory::commands::memory_conversation_rename,
-            memory::commands::memory_conversation_messages,
-            memory::commands::memory_turn_append,
-            memory::commands::memory_fact_upsert,
-            memory::commands::memory_fact_list,
-            memory::commands::memory_fact_delete,
-            memory::commands::memory_fact_clear,
-            memory::commands::memory_search,
-            memory::commands::memory_stats,
-            memory::commands::memory_clear_all,
             llm::openrouter_chat,
             llm::save_markdown,
         ])

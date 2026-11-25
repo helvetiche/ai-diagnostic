@@ -2,8 +2,6 @@ import { XIcon } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 
 import { OpenRouterFields } from "@/components/OpenRouterSettings";
-import { MemoryPanel } from "@/components/MemoryPanel";
-import { AI_MEMORY_ENABLED } from "@/lib/aiMemory";
 import { cn } from "@/lib/utils";
 
 const CLOSE_ANIMATION_MS = 500;
@@ -83,11 +81,6 @@ export function OpenRouterDrawer({ open, onClose }: { open: boolean; onClose: ()
           <p className="mt-5 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
             OpenRouter · local config
           </p>
-          {open && AI_MEMORY_ENABLED ? (
-            <div className="mt-6 border-t border-border-subtle pt-4">
-              <MemoryPanel />
-            </div>
-          ) : null}
         </div>
       </div>
     </dialog>

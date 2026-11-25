@@ -560,6 +560,14 @@
   opacity: 1;
 }
 
-.disclosure > div {
-  overflow: hidden;
+.typewriter-char {
+  display: inline;
+  animation: typewriter-char-in 180ms var(--ease-soft) backwards;
 }
+
+@keyframes typewriter-char-in {
+  from {
+    opacity: 0;
+  }
+}
+

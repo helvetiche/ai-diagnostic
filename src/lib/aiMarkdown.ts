@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AiMessage } from "@/types/aiMemory";
+import type { AiMessage } from "@/types/aiChat";
 
 export function conversationToMarkdown(messages: AiMessage[]): string {
   const entries = messages
