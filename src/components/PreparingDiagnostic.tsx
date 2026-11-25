@@ -9,11 +9,7 @@ export function PreparingDiagnostic({
 }) {
   const percent = Math.round(Math.min(1, Math.max(0, progress)) * 100);
   const runningTask = tasks.find((task) => task.status === "running");
-  const statusLabel = runningTask
-    ? runningTask.label
-    : percent >= 100
-      ? "Ready"
-      : "Preparing";
+  const statusLabel = runningTask ? runningTask.label : percent >= 100 ? "Ready" : "Preparing";
 
   return (
     <div className="app-canvas min-h-screen pb-24">

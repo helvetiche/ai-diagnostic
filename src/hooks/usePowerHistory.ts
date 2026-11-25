@@ -14,7 +14,12 @@ const swrOptions = {
 };
 
 export function usePowerHistory() {
-  const { data: snapshot, error, isLoading, mutate } = useSWR<PowerSnapshot>(
+  const {
+    data: snapshot,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<PowerSnapshot>(
     "power_history",
     () => invoke<PowerSnapshot>("power_history"),
     swrOptions,
@@ -26,5 +31,10 @@ export function usePowerHistory() {
 
   const status: PowerHistoryStatus = isLoading && !snapshot ? "loading" : error ? "error" : "ready";
 
-  return { snapshot: snapshot ?? null, status, error: error instanceof Error ? error.message : error ? String(error) : null, refresh };
+  return {
+    snapshot: snapshot ?? null,
+    status,
+    error: error instanceof Error ? error.message : error ? String(error) : null,
+    refresh,
+  };
 }

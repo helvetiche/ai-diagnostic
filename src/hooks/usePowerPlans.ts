@@ -53,9 +53,7 @@ export function usePowerPlans() {
       setPendingGuid(guid);
       setError(null);
 
-      setPlans((current) =>
-        current.map((plan) => ({ ...plan, active: plan.guid === guid })),
-      );
+      setPlans((current) => current.map((plan) => ({ ...plan, active: plan.guid === guid })));
 
       try {
         await invoke("set_power_plan", { guid });

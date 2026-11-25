@@ -29,6 +29,12 @@ export type AiMemoryFact = {
   pinned: boolean;
 };
 
+export type MemoryBootstrap = {
+  conversations: AiConversation[];
+  activeConversationId: string | null;
+  messages: AiMessage[];
+};
+
 export type MemorySearchHit = {
   entityType: string;
   entityId: string;
@@ -41,5 +47,4 @@ export type MemoryStats = {
   conversations: number;
   messages: number;
   facts: number;
-  indexEntries: number;
 };

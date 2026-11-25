@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   CaretDownIcon,
   CaretUpIcon,
@@ -18,14 +18,18 @@ import { StatusMark } from "@/components/primitives/StatusMark";
 import { Skeleton } from "@/components/primitives/Skeleton";
 import { Vitals } from "@/components/Vitals";
 import { Sparkline } from "@/components/Sparkline";
-import { useProcesses } from "@/hooks/useProcesses";
+import { useProcesses, type ProcessHistoryPoint } from "@/hooks/useProcesses";
 import { useResourceStream } from "@/hooks/useResourceStream";
 import { useThermalStream } from "@/hooks/useThermalStream";
 import { formatBytes, formatPercent } from "@/lib/format";
 import { loadToneClass } from "@/lib/loadLevel";
 import { cn } from "@/lib/utils";
+import type { ProcessSample } from "@/types/processes";
+import type { ResourceSample } from "@/types/resources";
+import type { ThermalSample } from "@/types/thermal";
 
 type Band = "Low" | "Moderate" | "High" | "Critical";
+type SortKey = "name" | "cpu" | "memory" | "gpu";
 
 const BANDS: { id: Band; dot: string }[] = [
   { id: "Low", dot: "bg-success" },
@@ -109,8 +113,13 @@ function NumberField({
         inputMode="numeric"
         value={value}
         onChange={(event) => {
-          const parsed = Number(event.target.value);
-          onChange(Number.isNaN(parsed) ? 0 : parsed);
+          const raw = event.target.value;
+          if (raw.trim() === "") {
+            onChange(0);
+            return;
+          }
+          const parsed = Number(raw);
+          onChange(Number.isFinite(parsed) ? parsed : 0);
         }}
         className={cn(NUMBER_CLASS, "mt-1")}
       />
@@ -129,6 +138,8 @@ function LevelFilter({
   counts: Record<Band, number>;
   onToggle: (band: string) => void;
 }) {
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
   return (
     <fieldset>
       <legend className="text-[10px] font-medium text-muted-foreground">{legend}</legend>
@@ -140,7 +151,7 @@ function LevelFilter({
           >
             <input
               type="checkbox"
-              checked={selected.includes(band.id)}
+              checked={selectedSet.has(band.id)}
               onChange={() => onToggle(band.id)}
               className="size-3.5 accent-primary"
             />
@@ -156,8 +167,9 @@ function LevelFilter({
   );
 }
 
-function FilterPanel({
+function ProcessFilterDialog({
   id,
+  panelRef,
   levelFilter,
   onToggleLevel,
   minCpu,
@@ -176,8 +188,10 @@ function FilterPanel({
   gpuCounts,
   activeCount,
   onReset,
+  onCancel,
 }: {
   id: string;
+  panelRef: RefObject<HTMLDialogElement | null>;
   levelFilter: string[];
   onToggleLevel: (band: string) => void;
   minCpu: number;
@@ -196,13 +210,18 @@ function FilterPanel({
   gpuCounts: Record<Band, number>;
   activeCount: number;
   onReset: () => void;
+  onCancel: () => void;
 }) {
   return (
-    <div
+    <dialog
+      ref={panelRef}
       id={id}
-      role="dialog"
       aria-label="Filter processes"
-      className="pop-enter glass absolute top-full right-0 z-30 mt-2 max-h-[min(70vh,34rem)] w-[20rem] overflow-y-auto rounded-panel p-4"
+      onCancel={(event) => {
+        event.preventDefault();
+        onCancel();
+      }}
+      className="pop-enter glass bottom-auto left-auto right-0 top-full z-30 m-0 mt-2 h-auto max-h-[min(70vh,34rem)] w-[20rem] overflow-y-auto rounded-panel border-0 p-4"
     >
       <LevelFilter
         legend="CPU level"
@@ -248,7 +267,7 @@ function FilterPanel({
       >
         Reset filters
       </Button>
-    </div>
+    </dialog>
   );
 }
 
@@ -281,35 +300,50 @@ function ProcessMetric({
   );
 }
 
-function VitalsSkeleton() {
+function VitalSkeletonCard({ variant }: { variant: number }) {
   return (
-    <div
-      aria-busy="true"
-      className="grid grid-cols-4 divide-x divide-border-subtle border border-border [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:gap-3 [&>div]:p-3 sm:[&>div]:p-4"
-    >
-      {Array.from({ length: 4 }, (_, index) => (
-        <div key={index}>
-          <div className="flex items-start justify-between gap-2">
-            <Skeleton className="h-3 w-14" />
-            <Skeleton className="h-4 w-10" />
-          </div>
+    <div data-variant={variant}>
+      <div className="flex items-start justify-between gap-2">
+        <Skeleton className="h-3 w-14" />
+        <Skeleton className="h-4 w-10" />
+      </div>
+      {variant === 0 ? (
+        <Skeleton className="h-6 w-20" />
+      ) : (
+        <div className="flex flex-col gap-1">
           <Skeleton className="h-6 w-20" />
-          <Skeleton className="mt-2 h-1.5 w-full" />
+          {variant === 1 ? <Skeleton className="h-2 w-16" /> : null}
+        </div>
+      )}
+      {variant === 2 ? (
+        <div className="mt-2 flex flex-col gap-2">
+          <Skeleton className="h-1.5 w-full" />
           <Skeleton className="h-3 w-12" />
         </div>
-      ))}
+      ) : (
+        <Skeleton className="mt-2 h-1.5 w-full" />
+      )}
+      {variant === 3 ? <Skeleton className="h-3 w-12" /> : null}
     </div>
   );
 }
 
-export function Processes() {
-  const { processes, processHistory, status, error, retry } = useProcesses();
-  const { samples } = useResourceStream();
-  const { samples: thermalSamples } = useThermalStream();
-  const latest = samples.at(-1) ?? null;
-  const thermalLatest = thermalSamples.at(-1) ?? null;
-  const systemMemoryTotal = latest?.memoryTotal ?? 0;
+function VitalsSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      data-loading="vitals"
+      className="grid grid-cols-4 divide-x divide-border-subtle border border-border [&>div]:flex [&>div]:min-w-0 [&>div]:flex-col [&>div]:gap-3 [&>div]:p-3 sm:[&>div]:p-4"
+    >
+      <VitalSkeletonCard variant={0} />
+      <VitalSkeletonCard variant={1} />
+      <VitalSkeletonCard variant={2} />
+      <VitalSkeletonCard variant={3} />
+    </div>
+  );
+}
 
+function useProcessFilterState(processes: ProcessSample[]) {
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
@@ -319,30 +353,12 @@ export function Processes() {
   const [gpuLevelFilter, setGpuLevelFilter] = useState<string[]>([]);
   const [minGpu, setMinGpu] = useState(0);
   const [maxGpu, setMaxGpu] = useState(100);
-  const [sortKey, setSortKey] = useState<"name" | "cpu" | "memory" | "gpu">("cpu");
+  const [sortKey, setSortKey] = useState<SortKey>("cpu");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(0);
 
-  const filterRootRef = useRef<HTMLDivElement>(null);
-  const filterPanelRef = useRef<HTMLDivElement>(null);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
-      }
-    }
-
-    document.addEventListener("keydown", handleShortcut);
-
-    return () => {
-      document.removeEventListener("keydown", handleShortcut);
-    };
-  }, []);
+  const levelSet = useMemo(() => new Set(levelFilter), [levelFilter]);
+  const gpuLevelSet = useMemo(() => new Set(gpuLevelFilter), [gpuLevelFilter]);
 
   useEffect(() => {
     setPage(0);
@@ -359,33 +375,6 @@ export function Processes() {
     sortDir,
   ]);
 
-  useEffect(() => {
-    if (!filterOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!filterRootRef.current?.contains(event.target as Node)) {
-        setFilterOpen(false);
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setFilterOpen(false);
-        filterButtonRef.current?.focus();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [filterOpen]);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
 
@@ -393,7 +382,7 @@ export function Processes() {
       if (q && !process.name.toLowerCase().includes(q)) {
         return false;
       }
-      if (levelFilter.length > 0 && !levelFilter.includes(processBand(process.cpu))) {
+      if (levelSet.size > 0 && !levelSet.has(processBand(process.cpu))) {
         return false;
       }
       if (process.cpu < minCpu || process.cpu > maxCpu) {
@@ -403,18 +392,18 @@ export function Processes() {
         return false;
       }
       if (process.gpu !== null) {
-        if (gpuLevelFilter.length > 0 && !gpuLevelFilter.includes(processBand(process.gpu))) {
+        if (gpuLevelSet.size > 0 && !gpuLevelSet.has(processBand(process.gpu))) {
           return false;
         }
         if (process.gpu < minGpu || process.gpu > maxGpu) {
           return false;
         }
-      } else if (gpuLevelFilter.length > 0) {
+      } else if (gpuLevelSet.size > 0) {
         return false;
       }
       return true;
     });
-  }, [processes, query, levelFilter, minCpu, maxCpu, gpuOnly, gpuLevelFilter, minGpu, maxGpu]);
+  }, [processes, query, levelSet, minCpu, maxCpu, gpuOnly, gpuLevelSet, minGpu, maxGpu]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -440,14 +429,14 @@ export function Processes() {
   const paginated = sorted.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
 
   const activeFilterCount =
-    (query.trim() ? 1 : 0) +
+    Number(Boolean(query.trim())) +
     levelFilter.length +
-    (minCpu > 0 ? 1 : 0) +
-    (maxCpu < 100 ? 1 : 0) +
+    Number(minCpu > 0) +
+    Number(maxCpu < 100) +
     gpuLevelFilter.length +
-    (minGpu > 0 ? 1 : 0) +
-    (maxGpu < 100 ? 1 : 0) +
-    (gpuOnly ? 1 : 0);
+    Number(minGpu > 0) +
+    Number(maxGpu < 100) +
+    Number(gpuOnly);
 
   const counts = useMemo<Record<Band, number>>(() => {
     const next: Record<Band, number> = { Low: 0, Moderate: 0, High: 0, Critical: 0 };
@@ -468,7 +457,7 @@ export function Processes() {
     return next;
   }, [processes]);
 
-  function toggleSort(key: "name" | "cpu" | "memory" | "gpu") {
+  function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((current) => (current === "asc" ? "desc" : "asc"));
     } else {
@@ -500,43 +489,559 @@ export function Processes() {
     setQuery("");
   }
 
-  const vitals = latest ? <Vitals latest={latest} thermal={thermalLatest} /> : null;
+  return {
+    query,
+    setQuery,
+    filterOpen,
+    setFilterOpen,
+    levelFilter,
+    minCpu,
+    maxCpu,
+    setMinCpu,
+    setMaxCpu,
+    gpuLevelFilter,
+    minGpu,
+    maxGpu,
+    setMinGpu,
+    setMaxGpu,
+    gpuOnly,
+    setGpuOnly,
+    sortKey,
+    sortDir,
+    currentPage,
+    totalPages,
+    setPage,
+    paginated,
+    filteredCount: sorted.length,
+    counts,
+    gpuCounts,
+    activeFilterCount,
+    toggleSort,
+    toggleLevel,
+    toggleGpuLevel,
+    resetFilters,
+  };
+}
+
+function ProcessTable({
+  rows,
+  history,
+  systemMemoryTotal,
+  sortKey,
+  sortDir,
+  onSort,
+  count,
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  rows: ProcessSample[];
+  history: Record<number, ProcessHistoryPoint[]>;
+  systemMemoryTotal: number;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  count: number;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <>
+      <div className="overflow-x-auto border-t border-border-subtle">
+        <table className="w-full min-w-[38rem] table-fixed">
+          <thead>
+            <tr className="text-muted-foreground">
+              <th scope="col" className="px-4 py-1 text-left">
+                <SortHeader
+                  label="Process"
+                  icon={<ListBulletsIcon size={12} />}
+                  active={sortKey === "name"}
+                  direction={sortDir}
+                  onClick={() => onSort("name")}
+                />
+              </th>
+              <th scope="col" className="w-[11rem] px-3 py-1 text-right">
+                <div className="flex justify-end">
+                  <SortHeader
+                    label="CPU"
+                    icon={<CpuIcon size={12} />}
+                    active={sortKey === "cpu"}
+                    direction={sortDir}
+                    onClick={() => onSort("cpu")}
+                  />
+                </div>
+              </th>
+              <th scope="col" className="w-[12rem] px-3 py-1 text-right">
+                <div className="flex justify-end">
+                  <SortHeader
+                    label="Memory"
+                    icon={<MemoryIcon size={12} />}
+                    active={sortKey === "memory"}
+                    direction={sortDir}
+                    onClick={() => onSort("memory")}
+                  />
+                </div>
+              </th>
+              <th scope="col" className="w-[9rem] px-4 py-1 text-right">
+                <div className="flex justify-end">
+                  <SortHeader
+                    label="GPU"
+                    icon={<GraphicsCardIcon size={12} />}
+                    active={sortKey === "gpu"}
+                    direction={sortDir}
+                    onClick={() => onSort("gpu")}
+                  />
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((process) => {
+              const points = history[process.pid] ?? [];
+
+              return (
+                <tr
+                  key={process.pid}
+                  className="border-t border-border-subtle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted"
+                >
+                  <td className="px-4 py-2">
+                    <div className="flex min-w-0 items-baseline gap-2">
+                      <span className="truncate text-[12px] text-foreground">{process.name}</span>
+                      <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                        {process.pid}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <ProcessMetric
+                      values={points.map((point) => point.cpu)}
+                      color="var(--chart-1)"
+                      min={0}
+                      max={100}
+                    >
+                      <span
+                        className={cn(
+                          "text-right font-mono text-[11px] tabular-nums",
+                          loadToneClass(process.cpu),
+                        )}
+                      >
+                        {formatPercent(process.cpu)}
+                      </span>
+                    </ProcessMetric>
+                  </td>
+                  <td className="px-3 py-2">
+                    <ProcessMetric
+                      values={points.map((point) =>
+                        systemMemoryTotal > 0
+                          ? (point.memory / systemMemoryTotal) * 100
+                          : point.memory,
+                      )}
+                      color="var(--chart-2)"
+                      min={0}
+                      max={systemMemoryTotal > 0 ? 100 : undefined}
+                    >
+                      <span className="font-mono text-[11px] tabular-nums text-foreground">
+                        {formatBytes(process.memory)}
+                      </span>
+                      {systemMemoryTotal > 0 ? (
+                        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                          {formatPercent((process.memory / systemMemoryTotal) * 100)}
+                        </span>
+                      ) : null}
+                    </ProcessMetric>
+                  </td>
+                  <td className="px-4 py-2">
+                    <ProcessMetric
+                      values={points
+                        .map((point) => point.gpu)
+                        .filter((value): value is number => value !== null)}
+                      color="var(--chart-1)"
+                      min={0}
+                      max={100}
+                    >
+                      <span className="font-mono text-[11px] tabular-nums text-foreground">
+                        {process.gpu === null ? "—" : formatPercent(process.gpu)}
+                      </span>
+                    </ProcessMetric>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-1.5">
+        <span className="text-[11px] text-muted-foreground">
+          {count === 1 ? "1 process" : `${count} processes`}
+        </span>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            disabled={currentPage === 0}
+            onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+          >
+            Previous
+          </Button>
+          <span className="px-2 font-mono text-[11px] tabular-nums text-muted-foreground">
+            {currentPage + 1} / {totalPages}
+          </span>
+          <Button
+            variant="ghost"
+            disabled={currentPage >= totalPages - 1}
+            onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function useFilterBehavior(filterOpen: boolean, setFilterOpen: (open: boolean) => void) {
+  const filterRootRef = useRef<HTMLDivElement>(null);
+  const filterDialogRef = useRef<HTMLDialogElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    }
+
+    document.addEventListener("keydown", handleShortcut);
+
+    return () => {
+      document.removeEventListener("keydown", handleShortcut);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!filterOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!filterRootRef.current?.contains(event.target as Node)) {
+        setFilterOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setFilterOpen(false);
+        filterButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [filterOpen, setFilterOpen]);
+
+  useEffect(() => {
+    if (!filterOpen) {
+      return;
+    }
+
+    const dialog = filterDialogRef.current;
+    if (!dialog) {
+      return;
+    }
+
+    if (!dialog.open) {
+      dialog.show();
+    }
+
+    const focusTimer = window.setTimeout(() => dialog.querySelector("input")?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [filterOpen]);
+
+  return { filterRootRef, filterDialogRef, filterButtonRef, searchRef };
+}
+
+function FilterCount({ count }: { count: number }) {
+  if (count <= 0) {
+    return null;
+  }
+
+  return <span className="font-mono text-[10px] tabular-nums text-primary">{count}</span>;
+}
+
+function EmptyProcesses({ processCount, onReset }: { processCount: number; onReset: () => void }) {
+  return (
+    <div className="border-t border-border-subtle px-4 py-10 text-center">
+      <p className="text-[12px] text-muted-foreground">
+        {processCount === 0 ? "No processes reported." : "No process matches these filters."}
+      </p>
+      {processCount > 0 ? (
+        <Button variant="ghost" className="mt-2" onClick={onReset}>
+          Reset filters
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function VitalsView({
+  latest,
+  thermalLatest,
+}: {
+  latest: ResourceSample | null;
+  thermalLatest: ThermalSample | null;
+}) {
+  if (!latest) {
+    return <VitalsSkeleton />;
+  }
+
+  return <Vitals latest={latest} thermal={thermalLatest} />;
+}
+
+function ProcessesErrorScreen({
+  latest,
+  thermalLatest,
+  error,
+  onRetry,
+}: {
+  latest: ResourceSample | null;
+  thermalLatest: ThermalSample | null;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <Screen>
+      <PageHeader title="Processes">
+        <StatusMark tone="critical">Unavailable</StatusMark>
+      </PageHeader>
+      <VitalsView latest={latest} thermalLatest={thermalLatest} />
+      <StateView
+        title="Process sampler unavailable"
+        code={error ?? "Unknown error"}
+        action={
+          <Button variant="primary" onClick={onRetry}>
+            Try again
+          </Button>
+        }
+      />
+    </Screen>
+  );
+}
+
+function ProcessesLoadingScreen({
+  latest,
+  thermalLatest,
+}: {
+  latest: ResourceSample | null;
+  thermalLatest: ThermalSample | null;
+}) {
+  return (
+    <Screen>
+      <PageHeader title="Processes">
+        <StatusMark tone="muted">Starting</StatusMark>
+      </PageHeader>
+      <VitalsView latest={latest} thermalLatest={thermalLatest} />
+      <StateView title="Starting process sampler" />
+    </Screen>
+  );
+}
+
+function FilterDialogSlot({
+  open,
+  levelFilter,
+  onToggleLevel,
+  minCpu,
+  maxCpu,
+  onMinCpu,
+  onMaxCpu,
+  gpuLevelFilter,
+  onToggleGpuLevel,
+  minGpu,
+  maxGpu,
+  onMinGpu,
+  onMaxGpu,
+  gpuOnly,
+  onGpuOnly,
+  counts,
+  gpuCounts,
+  activeCount,
+  panelRef,
+  onReset,
+  onClose,
+}: {
+  open: boolean;
+  levelFilter: string[];
+  onToggleLevel: (band: string) => void;
+  minCpu: number;
+  maxCpu: number;
+  onMinCpu: (value: number) => void;
+  onMaxCpu: (value: number) => void;
+  gpuLevelFilter: string[];
+  onToggleGpuLevel: (band: string) => void;
+  minGpu: number;
+  maxGpu: number;
+  onMinGpu: (value: number) => void;
+  onMaxGpu: (value: number) => void;
+  gpuOnly: boolean;
+  onGpuOnly: (value: boolean) => void;
+  counts: Record<Band, number>;
+  gpuCounts: Record<Band, number>;
+  activeCount: number;
+  panelRef: RefObject<HTMLDialogElement | null>;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <ProcessFilterDialog
+      id="process-filters"
+      panelRef={panelRef}
+      levelFilter={levelFilter}
+      onToggleLevel={onToggleLevel}
+      minCpu={minCpu}
+      maxCpu={maxCpu}
+      onMinCpu={onMinCpu}
+      onMaxCpu={onMaxCpu}
+      gpuLevelFilter={gpuLevelFilter}
+      onToggleGpuLevel={onToggleGpuLevel}
+      minGpu={minGpu}
+      maxGpu={maxGpu}
+      onMinGpu={onMinGpu}
+      onMaxGpu={onMaxGpu}
+      gpuOnly={gpuOnly}
+      onGpuOnly={onGpuOnly}
+      counts={counts}
+      gpuCounts={gpuCounts}
+      activeCount={activeCount}
+      onReset={onReset}
+      onCancel={onClose}
+    />
+  );
+}
+
+function ProcessResults({
+  filteredCount,
+  processCount,
+  rows,
+  history,
+  systemMemoryTotal,
+  sortKey,
+  sortDir,
+  onSort,
+  currentPage,
+  totalPages,
+  onPageChange,
+  onReset,
+}: {
+  filteredCount: number;
+  processCount: number;
+  rows: ProcessSample[];
+  history: Record<number, ProcessHistoryPoint[]>;
+  systemMemoryTotal: number;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onReset: () => void;
+}) {
+  if (filteredCount === 0) {
+    return <EmptyProcesses processCount={processCount} onReset={onReset} />;
+  }
+
+  return (
+    <ProcessTable
+      rows={rows}
+      history={history}
+      systemMemoryTotal={systemMemoryTotal}
+      sortKey={sortKey}
+      sortDir={sortDir}
+      onSort={onSort}
+      count={filteredCount}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      onPageChange={onPageChange}
+    />
+  );
+}
+
+export function Processes() {
+  const { processes, processHistory, status, error, retry } = useProcesses();
+  const { samples } = useResourceStream();
+  const { samples: thermalSamples } = useThermalStream();
+  const latest = samples.at(-1) ?? null;
+  const thermalLatest = thermalSamples.at(-1) ?? null;
+  const systemMemoryTotal = latest?.memoryTotal ?? 0;
+
+  const {
+    query,
+    setQuery,
+    filterOpen,
+    setFilterOpen,
+    levelFilter,
+    minCpu,
+    maxCpu,
+    setMinCpu,
+    setMaxCpu,
+    gpuLevelFilter,
+    minGpu,
+    maxGpu,
+    setMinGpu,
+    setMaxGpu,
+    gpuOnly,
+    setGpuOnly,
+    sortKey,
+    sortDir,
+    currentPage,
+    totalPages,
+    setPage,
+    paginated,
+    filteredCount,
+    counts,
+    gpuCounts,
+    activeFilterCount,
+    toggleSort,
+    toggleLevel,
+    toggleGpuLevel,
+    resetFilters,
+  } = useProcessFilterState(processes);
+
+  const { filterRootRef, filterDialogRef, filterButtonRef, searchRef } = useFilterBehavior(
+    filterOpen,
+    setFilterOpen,
+  );
 
   if (status === "error" && processes.length === 0) {
     return (
-      <Screen>
-        <PageHeader title="Processes">
-          <StatusMark tone="critical">Unavailable</StatusMark>
-        </PageHeader>
-        {vitals ?? <VitalsSkeleton />}
-        <StateView
-          title="Process sampler unavailable"
-          code={error ?? "Unknown error"}
-          action={
-            <Button variant="primary" onClick={retry}>
-              Try again
-            </Button>
-          }
-        />
-      </Screen>
+      <ProcessesErrorScreen
+        latest={latest}
+        thermalLatest={thermalLatest}
+        error={error}
+        onRetry={retry}
+      />
     );
   }
 
   if (status === "loading" && processes.length === 0) {
-    return (
-      <Screen>
-        <PageHeader title="Processes">
-          <StatusMark tone="muted">Starting</StatusMark>
-        </PageHeader>
-        {vitals ?? <VitalsSkeleton />}
-        <StateView title="Starting process sampler" />
-      </Screen>
-    );
+    return <ProcessesLoadingScreen latest={latest} thermalLatest={thermalLatest} />;
   }
 
   return (
     <Screen>
-      {vitals ?? <VitalsSkeleton />}
+      <VitalsView latest={latest} thermalLatest={thermalLatest} />
 
       <Panel className="bg-transparent shadow-none">
         <div className="flex flex-wrap items-center gap-2 p-3">
@@ -570,215 +1075,56 @@ export function Processes() {
               variant="quiet"
               aria-expanded={filterOpen}
               aria-controls="process-filters"
-              onClick={() => {
-                setFilterOpen((current) => !current);
-                window.setTimeout(() => filterPanelRef.current?.querySelector("input")?.focus(), 0);
-              }}
+              onClick={() => setFilterOpen((current) => !current)}
             >
               <SlidersHorizontalIcon size={14} aria-hidden="true" />
               Filter
-              {activeFilterCount > 0 ? (
-                <span className="font-mono text-[10px] tabular-nums text-primary">
-                  {activeFilterCount}
-                </span>
-              ) : null}
+              <FilterCount count={activeFilterCount} />
             </Button>
 
-            {filterOpen ? (
-              <div ref={filterPanelRef}>
-                <FilterPanel
-                  id="process-filters"
-                  levelFilter={levelFilter}
-                  onToggleLevel={toggleLevel}
-                  minCpu={minCpu}
-                  maxCpu={maxCpu}
-                  onMinCpu={setMinCpu}
-                  onMaxCpu={setMaxCpu}
-                  gpuLevelFilter={gpuLevelFilter}
-                  onToggleGpuLevel={toggleGpuLevel}
-                  minGpu={minGpu}
-                  maxGpu={maxGpu}
-                  onMinGpu={setMinGpu}
-                  onMaxGpu={setMaxGpu}
-                  gpuOnly={gpuOnly}
-                  onGpuOnly={setGpuOnly}
-                  counts={counts}
-                  gpuCounts={gpuCounts}
-                  activeCount={activeFilterCount}
-                  onReset={resetFilters}
-                />
-              </div>
-            ) : null}
+            <FilterDialogSlot
+              open={filterOpen}
+              levelFilter={levelFilter}
+              onToggleLevel={toggleLevel}
+              minCpu={minCpu}
+              maxCpu={maxCpu}
+              onMinCpu={setMinCpu}
+              onMaxCpu={setMaxCpu}
+              gpuLevelFilter={gpuLevelFilter}
+              onToggleGpuLevel={toggleGpuLevel}
+              minGpu={minGpu}
+              maxGpu={maxGpu}
+              onMinGpu={setMinGpu}
+              onMaxGpu={setMaxGpu}
+              gpuOnly={gpuOnly}
+              onGpuOnly={setGpuOnly}
+              counts={counts}
+              gpuCounts={gpuCounts}
+              activeCount={activeFilterCount}
+              panelRef={filterDialogRef}
+              onReset={resetFilters}
+              onClose={() => {
+                setFilterOpen(false);
+                filterButtonRef.current?.focus();
+              }}
+            />
           </div>
         </div>
 
-        {sorted.length === 0 ? (
-          <div className="border-t border-border-subtle px-4 py-10 text-center">
-            <p className="text-[12px] text-muted-foreground">
-              {processes.length === 0
-                ? "No processes reported."
-                : "No process matches these filters."}
-            </p>
-            {processes.length > 0 ? (
-              <Button variant="ghost" className="mt-2" onClick={resetFilters}>
-                Reset filters
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto border-t border-border-subtle">
-              <table className="w-full min-w-[38rem] table-fixed">
-                <thead>
-                  <tr className="text-muted-foreground">
-                    <th scope="col" className="px-4 py-1 text-left">
-                      <SortHeader
-                        label="Process"
-                        icon={<ListBulletsIcon size={12} />}
-                        active={sortKey === "name"}
-                        direction={sortDir}
-                        onClick={() => toggleSort("name")}
-                      />
-                    </th>
-                    <th scope="col" className="w-[11rem] px-3 py-1 text-right">
-                      <div className="flex justify-end">
-                        <SortHeader
-                          label="CPU"
-                          icon={<CpuIcon size={12} />}
-                          active={sortKey === "cpu"}
-                          direction={sortDir}
-                          onClick={() => toggleSort("cpu")}
-                        />
-                      </div>
-                    </th>
-                    <th scope="col" className="w-[12rem] px-3 py-1 text-right">
-                      <div className="flex justify-end">
-                        <SortHeader
-                          label="Memory"
-                          icon={<MemoryIcon size={12} />}
-                          active={sortKey === "memory"}
-                          direction={sortDir}
-                          onClick={() => toggleSort("memory")}
-                        />
-                      </div>
-                    </th>
-                    <th scope="col" className="w-[9rem] px-4 py-1 text-right">
-                      <div className="flex justify-end">
-                        <SortHeader
-                          label="GPU"
-                          icon={<GraphicsCardIcon size={12} />}
-                          active={sortKey === "gpu"}
-                          direction={sortDir}
-                          onClick={() => toggleSort("gpu")}
-                        />
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginated.map((process) => {
-                    const history = processHistory[process.pid] ?? [];
-
-                    return (
-                      <tr
-                        key={process.pid}
-                        className="border-t border-border-subtle transition-colors duration-[120ms] ease-soft hover:bg-surface-muted"
-                      >
-                        <td className="px-4 py-2">
-                          <div className="flex min-w-0 items-baseline gap-2">
-                            <span className="truncate text-[12px] text-foreground">
-                              {process.name}
-                            </span>
-                            <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
-                              {process.pid}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <ProcessMetric
-                            values={history.map((point) => point.cpu)}
-                            color="var(--chart-1)"
-                            min={0}
-                            max={100}
-                          >
-                            <span
-                              className={cn(
-                                "text-right font-mono text-[11px] tabular-nums",
-                                loadToneClass(process.cpu),
-                              )}
-                            >
-                              {formatPercent(process.cpu)}
-                            </span>
-                          </ProcessMetric>
-                        </td>
-                        <td className="px-3 py-2">
-                          <ProcessMetric
-                            values={history.map((point) =>
-                              systemMemoryTotal > 0
-                                ? (point.memory / systemMemoryTotal) * 100
-                                : point.memory,
-                            )}
-                            color="var(--chart-2)"
-                            min={0}
-                            max={systemMemoryTotal > 0 ? 100 : undefined}
-                          >
-                            <span className="font-mono text-[11px] tabular-nums text-foreground">
-                              {formatBytes(process.memory)}
-                            </span>
-                            {systemMemoryTotal > 0 ? (
-                              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                                {formatPercent((process.memory / systemMemoryTotal) * 100)}
-                              </span>
-                            ) : null}
-                          </ProcessMetric>
-                        </td>
-                        <td className="px-4 py-2">
-                          <ProcessMetric
-                            values={history
-                              .map((point) => point.gpu)
-                              .filter((value): value is number => value !== null)}
-                            color="var(--chart-1)"
-                            min={0}
-                            max={100}
-                          >
-                            <span className="font-mono text-[11px] tabular-nums text-foreground">
-                              {process.gpu === null ? "—" : formatPercent(process.gpu)}
-                            </span>
-                          </ProcessMetric>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-1.5">
-              <span className="text-[11px] text-muted-foreground">
-                {sorted.length === 1 ? "1 process" : `${sorted.length} processes`}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  disabled={currentPage === 0}
-                  onClick={() => setPage((current) => Math.max(0, current - 1))}
-                >
-                  Previous
-                </Button>
-                <span className="px-2 font-mono text-[11px] tabular-nums text-muted-foreground">
-                  {currentPage + 1} / {totalPages}
-                </span>
-                <Button
-                  variant="ghost"
-                  disabled={currentPage >= totalPages - 1}
-                  onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
+        <ProcessResults
+          filteredCount={filteredCount}
+          processCount={processes.length}
+          rows={paginated}
+          history={processHistory}
+          systemMemoryTotal={systemMemoryTotal}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={toggleSort}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onReset={resetFilters}
+        />
       </Panel>
     </Screen>
   );

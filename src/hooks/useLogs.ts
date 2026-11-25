@@ -51,5 +51,10 @@ export function useLogs() {
 
   const status: Status = isLoading && !snapshot ? "loading" : error ? "error" : "ready";
 
-  return { snapshot: merged, status, error: error instanceof Error ? error.message : error ? String(error) : null, refresh };
+  return {
+    snapshot: merged,
+    status,
+    error: error instanceof Error ? error.message : error ? String(error) : null,
+    refresh,
+  };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import { AskAiDrawer } from "./components/AskAiDrawer";
 import { OpenRouterDrawer } from "./components/OpenRouterDrawer";
@@ -7,16 +7,47 @@ import { TopBar } from "./components/layout/TopBar";
 import { usePreload } from "./hooks/usePreload";
 import { useSamplerStreaming } from "./hooks/useSamplerStreaming";
 import type { ScreenId } from "./lib/navigation";
-import { Configure } from "./screens/Configure";
-import { Logs } from "./screens/Logs";
-import { Power } from "./screens/Power";
-import { Processes } from "./screens/Processes";
-import { ResourceGraph } from "./screens/ResourceGraph";
+
+const Configure = lazy(() =>
+  import("./screens/Configure").then((module) => ({ default: module.Configure })),
+);
+const Logs = lazy(() => import("./screens/Logs").then((module) => ({ default: module.Logs })));
+const Power = lazy(() => import("./screens/Power").then((module) => ({ default: module.Power })));
+const Processes = lazy(() =>
+  import("./screens/Processes").then((module) => ({ default: module.Processes })),
+);
+const ResourceGraph = lazy(() =>
+  import("./screens/ResourceGraph").then((module) => ({ default: module.ResourceGraph })),
+);
+
+const LOG_VIEWS: Partial<Record<ScreenId, "reliability" | "events" | "devices">> = {
+  reliability: "reliability",
+  events: "events",
+  devices: "devices",
+};
+
+function ScreenContent({ screen }: { screen: ScreenId }) {
+  const logView = LOG_VIEWS[screen];
+  if (logView) {
+    return <Logs view={logView} />;
+  }
+  if (screen === "overview") {
+    return <ResourceGraph />;
+  }
+  if (screen === "power") {
+    return <Power />;
+  }
+  if (screen === "processes") {
+    return <Processes />;
+  }
+  return <Configure />;
+}
 
 function App() {
   const { ready, tasks, progress } = usePreload();
   const [screen, setScreen] = useState<ScreenId>("overview");
   const [askAiOpen, setAskAiOpen] = useState(false);
+  const [askAiSession, setAskAiSession] = useState(0);
   const [openRouterOpen, setOpenRouterOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   useSamplerStreaming();
@@ -24,6 +55,19 @@ function App() {
   useEffect(() => {
     scrollerRef.current?.scrollTo(0, 0);
   }, [screen]);
+
+  function handleSelect(next: ScreenId) {
+    setScreen(next);
+    setAskAiOpen(false);
+    setOpenRouterOpen(false);
+  }
+
+  function handleAskAi() {
+    if (!askAiOpen) {
+      setAskAiSession((value) => value + 1);
+    }
+    setAskAiOpen((value) => !value);
+  }
 
   if (!ready) {
     return <PreparingDiagnostic tasks={tasks} progress={progress} />;
@@ -41,42 +85,28 @@ function App() {
 
         <TopBar
           active={screen}
-          onSelect={(next) => {
-            setScreen(next);
-            setAskAiOpen(false);
-            setOpenRouterOpen(false);
-          }}
-          onAskAi={() => setAskAiOpen((value) => !value)}
+          onSelect={handleSelect}
+          onAskAi={handleAskAi}
           askAiOpen={askAiOpen}
         />
 
         <main id="main">
           <div key={screen} className="screen-enter">
-            {screen === "overview" ? (
-              <ResourceGraph />
-            ) : screen === "power" ? (
-              <Power />
-            ) : screen === "processes" ? (
-              <Processes />
-            ) : screen === "reliability" ? (
-              <Logs view="reliability" />
-            ) : screen === "events" ? (
-              <Logs view="events" />
-            ) : screen === "devices" ? (
-              <Logs view="devices" />
-            ) : (
-              <Configure />
-            )}
+            <Suspense fallback={null}>
+              <ScreenContent screen={screen} />
+            </Suspense>
           </div>
         </main>
       </div>
 
-      <AskAiDrawer
-        open={askAiOpen}
-        onClose={() => setAskAiOpen(false)}
-        onOpenSettings={() => setOpenRouterOpen(true)}
-        keyboardActive={!openRouterOpen}
-      />
+      {askAiSession > 0 ? (
+        <AskAiDrawer
+          open={askAiOpen}
+          onClose={() => setAskAiOpen(false)}
+          onOpenSettings={() => setOpenRouterOpen(true)}
+          keyboardActive={!openRouterOpen}
+        />
+      ) : null}
 
       <OpenRouterDrawer open={openRouterOpen} onClose={() => setOpenRouterOpen(false)} />
     </>

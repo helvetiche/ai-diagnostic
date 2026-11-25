@@ -11,18 +11,18 @@ code changes are proposed beyond the data inventory.
 
 ## 1. Sources of truth on Windows
 
-| Source | What it gives | Access from Rust |
-| --- | --- | --- |
-| Windows Event Log (System, Application, Security, Setup, and `Applications and Services Logs`) | Boot/shutdown, crashes, disk errors, service failures, updates, WHEA hardware errors, driver loads, Defender, Sysmon | `EvtQuery` / `EvtRender` (already used in `power.rs`) |
-| WMI / CIM (`root\cimv2`, `root\wmi`, `root\Microsoft\Windows\Storage`, `root\SecurityCenter2`, `root\StandardCimv2`) | Hardware inventory, SMART verdict, storage counters, battery, OS/patches, devices, network, security products | `wmi` crate (already a dependency) or `windows` crate COM |
-| Registry (`HKLM`, `HKCU`) | Fast Startup, power settings, installed software (uninstall keys), services, drivers | `winreg` crate (already a dependency) |
-| Performance counters (PDH / `Win32_PerfFormattedData_*`) | Live CPU/memory/disk/network rates | `windows` crate PDH or sysinfo |
-| Native APIs | Uptime, memory, disk space, firmware, Secure Boot, TPM, battery | `windows` crate features |
-| File system | Minidumps, WER reports, CBS logs, setup logs, driver store | `std::fs` reads |
-| Sysmon (optional, installed separately) | Process/network/DNS/registry telemetry | Event Log channel `Microsoft-Windows-Sysmon/Operational` |
+| Source                                                                                                               | What it gives                                                                                                        | Access from Rust                                          |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Windows Event Log (System, Application, Security, Setup, and `Applications and Services Logs`)                       | Boot/shutdown, crashes, disk errors, service failures, updates, WHEA hardware errors, driver loads, Defender, Sysmon | `EvtQuery` / `EvtRender` (already used in `power.rs`)     |
+| WMI / CIM (`root\cimv2`, `root\wmi`, `root\Microsoft\Windows\Storage`, `root\SecurityCenter2`, `root\StandardCimv2`) | Hardware inventory, SMART verdict, storage counters, battery, OS/patches, devices, network, security products        | `wmi` crate (already a dependency) or `windows` crate COM |
+| Registry (`HKLM`, `HKCU`)                                                                                            | Fast Startup, power settings, installed software (uninstall keys), services, drivers                                 | `winreg` crate (already a dependency)                     |
+| Performance counters (PDH / `Win32_PerfFormattedData_*`)                                                             | Live CPU/memory/disk/network rates                                                                                   | `windows` crate PDH or sysinfo                            |
+| Native APIs                                                                                                          | Uptime, memory, disk space, firmware, Secure Boot, TPM, battery                                                      | `windows` crate features                                  |
+| File system                                                                                                          | Minidumps, WER reports, CBS logs, setup logs, driver store                                                           | `std::fs` reads                                           |
+| Sysmon (optional, installed separately)                                                                              | Process/network/DNS/registry telemetry                                                                               | Event Log channel `Microsoft-Windows-Sysmon/Operational`  |
 
-Rule of thumb: Event Log for *history*, WMI for *current state*, Registry for
-*configuration*, native APIs for *live values*. A "Logs" screen should merge
+Rule of thumb: Event Log for _history_, WMI for _current state_, Registry for
+_configuration_, native APIs for _live values_. A "Logs" screen should merge
 these into one timeline plus a health summary, never invent a value.
 
 ## 2. Event Log: channels and event IDs that matter
@@ -244,7 +244,7 @@ Optional high-fidelity (only if installed):
 
 ## 7. What "Logs" should be (proposed scope)
 
-A single destination that is *not* another live meter screen. It is the
+A single destination that is _not_ another live meter screen. It is the
 evidence surface: a filterable, time-ordered log of important system events
 plus a compact health summary. It complements Power (which is already a
 specialized log view) and Thermals/Resource Graph (live).

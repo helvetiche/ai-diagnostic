@@ -53,7 +53,11 @@ export function OpenRouterFields() {
               onClick={() => setShowKey((value) => !value)}
               className="border border-border px-2 text-muted-foreground transition-colors duration-[120ms] ease-soft hover:bg-surface-muted hover:text-foreground"
             >
-              {showKey ? <EyeSlashIcon size={13} aria-hidden="true" /> : <EyeIcon size={13} aria-hidden="true" />}
+              {showKey ? (
+                <EyeSlashIcon size={13} aria-hidden="true" />
+              ) : (
+                <EyeIcon size={13} aria-hidden="true" />
+              )}
             </button>
           </div>
         </div>
@@ -127,14 +131,25 @@ export function OpenRouterFields() {
             max={8192}
             step={64}
             value={config.maxTokens}
-            onChange={(event) => setConfig({ ...config, maxTokens: Number(event.target.value) })}
+            onChange={(event) => {
+              const raw = event.target.value;
+              if (raw.trim() === "") {
+                return;
+              }
+              const parsed = Number(raw);
+              if (!Number.isFinite(parsed)) {
+                return;
+              }
+              setConfig({ ...config, maxTokens: parsed });
+            }}
             className="w-full border border-border bg-surface-muted px-3 py-2 font-mono text-[11px] text-foreground focus:ring-2 focus:ring-ring focus:outline-none"
           />
         </label>
       </div>
 
       <p className={`text-[11px] leading-4 ${status ? "text-critical" : "text-muted-foreground"}`}>
-        {status ?? "Saved locally in this app. The key is sent only to your configured OpenRouter endpoint."}
+        {status ??
+          "Saved locally in this app. The key is sent only to your configured OpenRouter endpoint."}
       </p>
     </div>
   );

@@ -15,7 +15,7 @@ import {
   XCircleIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/primitives/Button";
 import { Meter } from "@/components/primitives/Meter";
@@ -28,7 +28,7 @@ import { usePowerHistory } from "@/hooks/usePowerHistory";
 import BorderGlow from "@/components/BorderGlow";
 import { formatDateTime, formatUptime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { PowerRecord } from "@/types/power";
+import type { PowerRecord, PowerSnapshot } from "@/types/power";
 
 const TAB_KEYS = ["summary", "shutdowns", "restarts", "power-offs"] as const;
 
@@ -133,6 +133,83 @@ function severityLabel(severity: PowerRecord["severity"]): string {
   return "Safe";
 }
 
+type PowerStatus = "Unknown" | "Restart recommended" | "Normal";
+
+const STATUS_TONE_CLASS: Record<PowerStatus, string> = {
+  "Restart recommended": "text-warning",
+  Unknown: "text-muted-foreground",
+  Normal: "text-success",
+};
+
+const STATUS_TONE: Record<PowerStatus, "warning" | "success"> = {
+  "Restart recommended": "warning",
+  Unknown: "success",
+  Normal: "success",
+};
+
+const STATUS_ICON: Record<PowerStatus, typeof CheckCircleIcon> = {
+  "Restart recommended": ArrowClockwiseIcon,
+  Unknown: CheckCircleIcon,
+  Normal: CheckCircleIcon,
+};
+
+const STATUS_HINT: Record<PowerStatus, string> = {
+  "Restart recommended": "Uptime exceeded 7 days. Restart recommended.",
+  Unknown: "Uptime under 7 days. Normal.",
+  Normal: "Uptime under 7 days. Normal.",
+};
+
+function uptimeStatus(seconds: number | null): PowerStatus {
+  if (seconds === null) {
+    return "Unknown";
+  }
+
+  if (seconds >= 7 * 86_400) {
+    return "Restart recommended";
+  }
+
+  return "Normal";
+}
+
+function formatUptimeOrDash(seconds: number | null): string {
+  if (seconds === null) {
+    return "—";
+  }
+
+  return formatUptime(seconds);
+}
+
+function timeMeter({
+  seconds,
+  label,
+  title,
+  tone,
+}: {
+  seconds: number | null;
+  label: string;
+  title: string;
+  tone: "warning" | "success";
+}) {
+  return (
+    <div title={title}>
+      <Meter className="mt-2" label={label} value={seconds ?? 0} max={7 * 86_400} tone={tone} />
+    </div>
+  );
+}
+
+function statusBadge(status: PowerStatus): ReactNode {
+  const Icon = STATUS_ICON[status];
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize ${STATUS_TONE_CLASS[status]}`}
+    >
+      <Icon size={10} aria-hidden="true" />
+      {status}
+    </span>
+  );
+}
+
 function timeQualifier(record: PowerRecord): string | null {
   const note = record.timeNote;
 
@@ -180,8 +257,8 @@ function RecordDetail({ record }: { record: PowerRecord }) {
 
       {record.facts.length > 0 ? (
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-          {record.facts.map((fact, index) => (
-            <div key={`${fact.label}-${index}`} className="min-w-0">
+          {record.facts.map((fact) => (
+            <div key={`${fact.label}-${fact.value}`} className="min-w-0">
               <dt className="text-[10px] font-medium text-muted-foreground">{fact.label}</dt>
               <dd className="mt-0.5 font-mono text-[11px] break-words text-foreground">
                 {fact.value}
@@ -195,9 +272,9 @@ function RecordDetail({ record }: { record: PowerRecord }) {
         <div>
           <p className="text-[10px] font-medium text-muted-foreground">Evidence</p>
           <ul className="mt-1.5 flex flex-col">
-            {record.events.map((event, index) => (
+            {record.events.map((event) => (
               <li
-                key={`${event.recordId}-${index}`}
+                key={`${event.recordId}-${event.eventId}-${event.provider}-${event.role}-${event.time ?? "unknown"}`}
                 className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border-subtle py-1.5 text-[11px] last:border-b-0"
               >
                 <span className="text-muted-foreground">{event.role}</span>
@@ -217,6 +294,10 @@ function RecordDetail({ record }: { record: PowerRecord }) {
   );
 }
 
+function recordTableKey(records: PowerRecord[]): string {
+  return records.map((record) => record.id).join("|");
+}
+
 function RecordTable({
   label,
   records,
@@ -231,10 +312,6 @@ function RecordTable({
   onSelect?: (record: PowerRecord) => void;
 }) {
   const [page, setPage] = useState(0);
-
-  useEffect(() => {
-    setPage(0);
-  }, [records]);
 
   const pageSizeValue = pageSize && pageSize > 0 ? pageSize : records.length;
   const totalPages = Math.max(1, Math.ceil(records.length / pageSizeValue));
@@ -256,19 +333,19 @@ function RecordTable({
           <tr className="text-[10px] font-medium text-muted-foreground">
             <th scope="col" className="w-[12.5rem] px-4 py-2 font-medium">
               <span className="inline-flex items-center gap-1.5">
-                <ClockIcon size={11} aria-hidden={true} />
+                <ClockIcon size={11} aria-hidden />
                 When
               </span>
             </th>
             <th scope="col" className="w-[10rem] px-3 py-2 font-medium">
               <span className="inline-flex items-center gap-1.5">
-                <PowerIcon size={11} aria-hidden={true} />
+                <PowerIcon size={11} aria-hidden />
                 Type
               </span>
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
               <span className="inline-flex items-center gap-1.5">
-                <ChatTextIcon size={11} aria-hidden={true} />
+                <ChatTextIcon size={11} aria-hidden />
                 Event
               </span>
             </th>
@@ -418,43 +495,16 @@ function PowerSkeleton() {
   );
 }
 
-export function Power() {
-  const { snapshot, status, error, refresh } = usePowerHistory();
-  const [activeTab, setActiveTab] = useState<TabKey>("summary");
-  const [selectedPower, setSelectedPower] = useState<PowerRecord | null>(null);
-  const [powerDrawerClosing, setPowerDrawerClosing] = useState(false);
-  const [powerAsk, setPowerAsk] = useState("");
-
-  function closePowerDrawer() {
-    setPowerDrawerClosing(true);
-    window.setTimeout(() => {
-      setSelectedPower(null);
-      setPowerDrawerClosing(false);
-    }, 240);
-  }
-
-  const powerStatus =
-    !snapshot || snapshot.uptimeSeconds === null
-      ? "Unknown"
-      : snapshot.uptimeSeconds >= 7 * 86400
-        ? "Restart recommended"
-        : "Normal";
-
-  const powerStatusClass =
-    powerStatus === "Restart recommended"
-      ? "text-warning"
-      : powerStatus === "Unknown"
-        ? "text-muted-foreground"
-        : "text-success";
-
-  const counts: Record<TabKey, number | null> = {
-    summary: null,
-    shutdowns: snapshot?.shutdowns.length ?? null,
-    restarts: snapshot?.restarts.length ?? null,
-    "power-offs": snapshot?.powerOffs.length ?? null,
-  };
-
-  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: TabKey) {
+function PowerTabs({
+  activeTab,
+  counts,
+  onSelect,
+}: {
+  activeTab: TabKey;
+  counts: Record<TabKey, number | null>;
+  onSelect: (tab: TabKey) => void;
+}) {
+  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: TabKey) {
     const index = TAB_KEYS.indexOf(current);
     let next: TabKey | null = null;
 
@@ -470,212 +520,174 @@ export function Power() {
 
     if (next) {
       event.preventDefault();
-      setActiveTab(next);
+      onSelect(next);
       document.getElementById(`power-tab-${next}`)?.focus();
     }
   }
 
-  if (status === "loading" && !snapshot) {
-    return <PowerSkeleton />;
-  }
+  return (
+    <div
+      role="tablist"
+      aria-label="Power history"
+      className="flex items-center gap-6 border-b border-border-subtle"
+    >
+      {TAB_KEYS.map((key) => {
+        const count = counts[key];
+        const current = activeTab === key;
+        const Icon = TAB_ICONS[key];
 
-  if (status === "error" && !snapshot) {
-    return (
-      <Screen>
-        <StateView
-          title="Power history unavailable"
-          code={error ?? "Unknown error"}
-          action={
-            <Button variant="primary" onClick={refresh}>
-              Try again
-            </Button>
-          }
-        />
-      </Screen>
-    );
-  }
+        return (
+          <button
+            key={key}
+            id={`power-tab-${key}`}
+            type="button"
+            role="tab"
+            aria-selected={current}
+            aria-controls={`power-panel-${key}`}
+            tabIndex={current ? 0 : -1}
+            onClick={() => onSelect(key)}
+            onKeyDown={(event) => handleKeyDown(event, key)}
+            className={cn(
+              "relative -mb-px flex min-h-10 items-center gap-2 text-[12px] font-medium whitespace-nowrap transition-colors duration-[120ms] ease-soft",
+              "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:rounded-full after:bg-primary after:transition-transform after:duration-200 after:ease-soft",
+              current
+                ? "text-foreground after:scale-x-100"
+                : "text-muted-foreground after:scale-x-0 hover:text-foreground",
+            )}
+          >
+            <Icon size={14} aria-hidden="true" />
+            {TAB_LABELS[key]}
+            {count === null ? null : (
+              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-  if (!snapshot) {
-    return null;
-  }
+function UptimeCard({ snapshot }: { snapshot: PowerSnapshot }) {
+  const status = uptimeStatus(snapshot.uptimeSeconds);
 
   return (
-    <Screen>
-      {status === "error" ? (
-        <ErrorBanner
-          title="The refresh failed"
-          detail={
-            error ??
-            "The last successful read is still shown. Try again when the desktop app is available."
-          }
-          onRetry={refresh}
-        />
-      ) : null}
-
-      {snapshot.logError ? (
-        <ErrorBanner
-          title="The System log could not be read"
-          detail={`${snapshot.logError} Uptime still works, but event history is unavailable.`}
-        />
-      ) : null}
-
-      <div
-        role="tablist"
-        aria-label="Power history"
-        className="flex items-center gap-6 border-b border-border-subtle"
-      >
-        {TAB_KEYS.map((key) => {
-          const count = counts[key];
-          const current = activeTab === key;
-          const Icon = TAB_ICONS[key];
-
-          return (
-            <button
-              key={key}
-              id={`power-tab-${key}`}
-              type="button"
-              role="tab"
-              aria-selected={current}
-              aria-controls={`power-panel-${key}`}
-              tabIndex={current ? 0 : -1}
-              onClick={() => setActiveTab(key)}
-              onKeyDown={(event) => handleTabKeyDown(event, key)}
-              className={cn(
-                "relative -mb-px flex min-h-10 items-center gap-2 text-[12px] font-medium whitespace-nowrap transition-colors duration-[120ms] ease-soft",
-                "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:rounded-full after:bg-primary after:transition-transform after:duration-200 after:ease-soft",
-                current
-                  ? "text-foreground after:scale-x-100"
-                  : "text-muted-foreground after:scale-x-0 hover:text-foreground",
-              )}
-            >
-              <Icon size={14} aria-hidden="true" />
-              {TAB_LABELS[key]}
-              {count === null ? null : (
-                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div data-card="uptime" className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <ClockIcon size={12} aria-hidden="true" />
+          Uptime
+        </span>
+        {statusBadge(status)}
       </div>
+      <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
+        {formatUptimeOrDash(snapshot.uptimeSeconds)}
+      </span>
+      {timeMeter({
+        seconds: snapshot.uptimeSeconds,
+        label: "Uptime progress",
+        title: STATUS_HINT[status],
+        tone: STATUS_TONE[status],
+      })}
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-3 divide-x divide-y divide-border-subtle border border-border">
-        <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
-          <div className="flex items-start justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <ClockIcon size={12} aria-hidden="true" />
-              Uptime
-            </span>
-            <span
-              className={`inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize ${powerStatusClass}`}
-            >
-              {powerStatus === "Restart recommended" ? (
-                <ArrowClockwiseIcon size={10} aria-hidden="true" />
-              ) : (
-                <CheckCircleIcon size={10} aria-hidden="true" />
-              )}
-              {powerStatus}
-            </span>
-          </div>
-          <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
-            {snapshot.uptimeSeconds === null ? "—" : formatUptime(snapshot.uptimeSeconds)}
-          </span>
-          <div
-            title={
-              powerStatus === "Restart recommended"
-                ? "Uptime exceeded 7 days. Restart recommended."
-                : "Uptime under 7 days. Normal."
-            }
-          >
-            <Meter
-              className="mt-2"
-              label="Uptime progress"
-              value={snapshot.uptimeSeconds ?? 0}
-              max={7 * 86_400}
-              tone={powerStatus === "Restart recommended" ? "warning" : "success"}
-            />
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
-          <div className="flex items-start justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <PulseIcon size={12} aria-hidden="true" />
-              Active time
-            </span>
-            <span className="inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize text-success">
-              <CheckCircleIcon size={10} aria-hidden="true" />
-              Normal
-            </span>
-          </div>
-          <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
-            {snapshot.activeSeconds === null ? "—" : formatUptime(snapshot.activeSeconds)}
-          </span>
-          <div title="Active time under 7 days. Normal.">
-            <Meter
-              className="mt-2"
-              label="Active time progress"
-              value={snapshot.activeSeconds ?? 0}
-              max={7 * 86_400}
-              tone="success"
-            />
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
-          <div className="flex items-start justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <MoonIcon size={12} aria-hidden="true" />
-              Sleep time
-            </span>
-            <span className="inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize text-success">
-              <CheckCircleIcon size={10} aria-hidden="true" />
-              Normal
-            </span>
-          </div>
-          <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
-            {snapshot.sleepSeconds === null ? "—" : formatUptime(snapshot.sleepSeconds)}
-          </span>
-          <div title="Sleep time under 7 days. Normal.">
-            <Meter
-              className="mt-2"
-              label="Sleep time progress"
-              value={snapshot.sleepSeconds ?? 0}
-              max={7 * 86_400}
-              tone="success"
-            />
-          </div>
-        </div>
+function ActiveTimeCard({ snapshot }: { snapshot: PowerSnapshot }) {
+  return (
+    <div data-card="active-time" className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <PulseIcon size={12} aria-hidden="true" />
+          Active time
+        </span>
+        <span className="inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize text-success">
+          <CheckCircleIcon size={10} aria-hidden="true" />
+          Normal
+        </span>
       </div>
+      <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
+        {formatUptimeOrDash(snapshot.activeSeconds)}
+      </span>
+      {timeMeter({
+        seconds: snapshot.activeSeconds,
+        label: "Active time progress",
+        title: "Active time under 7 days. Normal.",
+        tone: "success",
+      })}
+    </div>
+  );
+}
 
+function SleepTimeCard({ snapshot }: { snapshot: PowerSnapshot }) {
+  return (
+    <div data-card="sleep-time" className="flex min-w-0 flex-col gap-1 p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <MoonIcon size={12} aria-hidden="true" />
+          Sleep time
+        </span>
+        <span className="inline-flex items-center gap-1 border border-border-subtle bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] leading-3 capitalize text-success">
+          <CheckCircleIcon size={10} aria-hidden="true" />
+          Normal
+        </span>
+      </div>
+      <span className="font-mono text-[20px] leading-none tabular-nums text-foreground">
+        {formatUptimeOrDash(snapshot.sleepSeconds)}
+      </span>
+      {timeMeter({
+        seconds: snapshot.sleepSeconds,
+        label: "Sleep time progress",
+        title: "Sleep time under 7 days. Normal.",
+        tone: "success",
+      })}
+    </div>
+  );
+}
+
+function PowerSummaryCards({ snapshot }: { snapshot: PowerSnapshot }) {
+  return (
+    <div className="grid grid-cols-3 divide-x divide-y divide-border-subtle border border-border">
+      <UptimeCard snapshot={snapshot} />
+      <ActiveTimeCard snapshot={snapshot} />
+      <SleepTimeCard snapshot={snapshot} />
+    </div>
+  );
+}
+
+function PowerRecordPanels({
+  snapshot,
+  activeTab,
+  onSelect,
+}: {
+  snapshot: PowerSnapshot;
+  activeTab: TabKey;
+  onSelect: (record: PowerRecord) => void;
+}) {
+  const criticalRecords = [
+    ...snapshot.shutdowns,
+    ...snapshot.restarts,
+    ...snapshot.powerOffs,
+    ...snapshot.unclassifiedStops,
+  ].filter((record) => record.isStop && record.severity === "critical");
+
+  return (
+    <>
       <div
         id="power-panel-summary"
         role="tabpanel"
         aria-labelledby="power-tab-summary"
         hidden={activeTab !== "summary"}
       >
-        {snapshot ? (
-          <RecordTable
-            label="Critical power records"
-            records={[
-              ...snapshot.shutdowns,
-              ...snapshot.restarts,
-              ...snapshot.powerOffs,
-              ...snapshot.unclassifiedStops,
-            ].filter((record) => record.isStop && record.severity === "critical")}
-            emptyTitle="No critical stops recorded"
-            pageSize={5}
-            onSelect={(record) => {
-              setPowerDrawerClosing(false);
-              setSelectedPower(record);
-            }}
-          />
-        ) : (
-          <section className="border border-border p-4 text-[11px] text-muted-foreground">
-            Power history unavailable.
-          </section>
-        )}
+        <RecordTable
+          key={`summary-${recordTableKey(criticalRecords)}`}
+          label="Critical power records"
+          records={criticalRecords}
+          emptyTitle="No critical stops recorded"
+          pageSize={5}
+          onSelect={onSelect}
+        />
       </div>
 
       <div
@@ -691,13 +703,11 @@ export function Power() {
           </p>
         ) : null}
         <RecordTable
+          key={`shutdowns-${recordTableKey(snapshot.shutdowns)}`}
           label="Shutdown records"
           records={snapshot.shutdowns}
           emptyTitle="No shutdowns recorded"
-          onSelect={(record) => {
-            setPowerDrawerClosing(false);
-            setSelectedPower(record);
-          }}
+          onSelect={onSelect}
         />
         {snapshot.unclassifiedStops.length > 0 ? (
           <div className="mt-2 flex flex-col gap-3">
@@ -705,13 +715,11 @@ export function Power() {
               Clean stops without a request
             </h2>
             <RecordTable
+              key={`clean-stops-${recordTableKey(snapshot.unclassifiedStops)}`}
               label="Clean stops without a request"
               records={snapshot.unclassifiedStops}
               emptyTitle="No clean stops without a request"
-              onSelect={(record) => {
-                setPowerDrawerClosing(false);
-                setSelectedPower(record);
-              }}
+              onSelect={onSelect}
             />
           </div>
         ) : null}
@@ -725,13 +733,11 @@ export function Power() {
         hidden={activeTab !== "restarts"}
       >
         <RecordTable
+          key={`restarts-${recordTableKey(snapshot.restarts)}`}
           label="Restart records"
           records={snapshot.restarts}
           emptyTitle="No restarts recorded"
-          onSelect={(record) => {
-            setPowerDrawerClosing(false);
-            setSelectedPower(record);
-          }}
+          onSelect={onSelect}
         />
       </div>
 
@@ -743,70 +749,219 @@ export function Power() {
         hidden={activeTab !== "power-offs"}
       >
         <RecordTable
+          key={`power-offs-${recordTableKey(snapshot.powerOffs)}`}
           label="Power-off records"
           records={snapshot.powerOffs}
           emptyTitle="No unexpected stops recorded"
-          onSelect={(record) => {
-            setPowerDrawerClosing(false);
-            setSelectedPower(record);
-          }}
+          onSelect={onSelect}
         />
       </div>
+    </>
+  );
+}
+
+function PowerDrawer({
+  record,
+  closing,
+  ask,
+  onAsk,
+  onClose,
+}: {
+  record: PowerRecord;
+  closing: boolean;
+  ask: string;
+  onAsk: (value: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-background/60 duration-240",
+          closing ? "animate-out fade-out" : "animate-in fade-in",
+        )}
+        onClick={onClose}
+        aria-hidden
+      />
+      <aside
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 h-screen w-1/2 overflow-x-hidden overflow-y-auto overscroll-contain border-l border-border bg-surface p-6 shadow-card duration-240",
+          closing
+            ? "animate-out fade-out slide-out-to-right-full"
+            : "animate-in fade-in slide-in-from-right-full",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[13px] font-medium text-foreground">Power record</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground transition-colors duration-[120ms] ease-soft hover:text-foreground"
+            aria-label="Close"
+          >
+            <XIcon size={14} weight="fill" aria-hidden />
+          </button>
+        </div>
+        <div className="mt-4">
+          <BorderGlow borderRadius={0}>
+            <div className="relative flex items-center">
+              <MagnifyingGlassIcon
+                size={13}
+                className="pointer-events-none absolute left-3 text-muted-foreground"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={ask}
+                onChange={(event) => onAsk(event.target.value)}
+                placeholder="Ask AI"
+                aria-label="Ask AI"
+                className="w-full bg-transparent py-2 pl-9 pr-3 text-[12px] text-white/90 placeholder:text-white/50 focus:outline-none"
+              />
+            </div>
+          </BorderGlow>
+        </div>
+        <div className="mt-5">
+          <RecordDetail record={record} />
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function PowerUnavailable({ error, onRetry }: { error: string | null; onRetry: () => void }) {
+  return (
+    <Screen>
+      <StateView
+        title="Power history unavailable"
+        code={error ?? "Unknown error"}
+        action={
+          <Button variant="primary" onClick={onRetry}>
+            Try again
+          </Button>
+        }
+      />
+    </Screen>
+  );
+}
+
+function PowerContent({
+  snapshot,
+  status,
+  error,
+  onRefresh,
+  activeTab,
+  onTabChange,
+  selectedPower,
+  drawerClosing,
+  ask,
+  onAsk,
+  onSelect,
+  onCloseDrawer,
+}: {
+  snapshot: PowerSnapshot;
+  status: "loading" | "ready" | "error";
+  error: string | null;
+  onRefresh: () => void;
+  activeTab: TabKey;
+  onTabChange: (tab: TabKey) => void;
+  selectedPower: PowerRecord | null;
+  drawerClosing: boolean;
+  ask: string;
+  onAsk: (value: string) => void;
+  onSelect: (record: PowerRecord) => void;
+  onCloseDrawer: () => void;
+}) {
+  const counts: Record<TabKey, number | null> = {
+    summary: null,
+    shutdowns: snapshot.shutdowns.length,
+    restarts: snapshot.restarts.length,
+    "power-offs": snapshot.powerOffs.length,
+  };
+
+  return (
+    <Screen>
+      {status === "error" ? (
+        <ErrorBanner
+          title="The refresh failed"
+          detail={
+            error ??
+            "The last successful read is still shown. Try again when the desktop app is available."
+          }
+          onRetry={onRefresh}
+        />
+      ) : null}
+
+      {snapshot.logError ? (
+        <ErrorBanner
+          title="The System log could not be read"
+          detail={`${snapshot.logError} Uptime still works, but event history is unavailable.`}
+        />
+      ) : null}
+
+      <PowerTabs activeTab={activeTab} counts={counts} onSelect={onTabChange} />
+      <PowerSummaryCards snapshot={snapshot} />
+      <PowerRecordPanels snapshot={snapshot} activeTab={activeTab} onSelect={onSelect} />
 
       {selectedPower ? (
-        <>
-          <div
-            className={cn(
-              "fixed inset-0 z-40 bg-background/60 duration-240",
-              powerDrawerClosing ? "animate-out fade-out" : "animate-in fade-in",
-            )}
-            onClick={closePowerDrawer}
-            aria-hidden={true}
-          />
-          <aside
-            className={cn(
-              "fixed inset-y-0 right-0 z-50 h-screen w-1/2 overflow-x-hidden overflow-y-auto overscroll-contain border-l border-border bg-surface p-6 shadow-card duration-240",
-              powerDrawerClosing
-                ? "animate-out fade-out slide-out-to-right-full"
-                : "animate-in fade-in slide-in-from-right-full",
-            )}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[13px] font-medium text-foreground">Power record</h2>
-              <button
-                type="button"
-                onClick={closePowerDrawer}
-                className="text-muted-foreground transition-colors duration-[120ms] ease-soft hover:text-foreground"
-                aria-label="Close"
-              >
-                <XIcon size={14} weight="fill" aria-hidden={true} />
-              </button>
-            </div>
-            <div className="mt-4">
-              <BorderGlow borderRadius={0}>
-                <div className="relative flex items-center">
-                  <MagnifyingGlassIcon
-                    size={13}
-                    className="pointer-events-none absolute left-3 text-muted-foreground"
-                    aria-hidden={true}
-                  />
-                  <input
-                    type="search"
-                    value={powerAsk}
-                    onChange={(event) => setPowerAsk(event.target.value)}
-                    placeholder="Ask AI"
-                    aria-label="Ask AI"
-                    className="w-full bg-transparent py-2 pl-9 pr-3 text-[12px] text-white/90 placeholder:text-white/50 focus:outline-none"
-                  />
-                </div>
-              </BorderGlow>
-            </div>
-            <div className="mt-5">
-              <RecordDetail record={selectedPower} />
-            </div>
-          </aside>
-        </>
+        <PowerDrawer
+          record={selectedPower}
+          closing={drawerClosing}
+          ask={ask}
+          onAsk={onAsk}
+          onClose={onCloseDrawer}
+        />
       ) : null}
     </Screen>
+  );
+}
+
+export function Power() {
+  const { snapshot, status, error, refresh } = usePowerHistory();
+  const [activeTab, setActiveTab] = useState<TabKey>("summary");
+  const [selectedPower, setSelectedPower] = useState<PowerRecord | null>(null);
+  const [powerDrawerClosing, setPowerDrawerClosing] = useState(false);
+  const [powerAsk, setPowerAsk] = useState("");
+
+  function closePowerDrawer() {
+    setPowerDrawerClosing(true);
+    window.setTimeout(() => {
+      setSelectedPower(null);
+      setPowerDrawerClosing(false);
+    }, 240);
+  }
+
+  function selectPower(record: PowerRecord) {
+    setPowerDrawerClosing(false);
+    setSelectedPower(record);
+  }
+
+  if (status === "loading" && !snapshot) {
+    return <PowerSkeleton />;
+  }
+
+  if (status === "error" && !snapshot) {
+    return <PowerUnavailable error={error} onRetry={refresh} />;
+  }
+
+  if (!snapshot) {
+    return null;
+  }
+
+  return (
+    <PowerContent
+      snapshot={snapshot}
+      status={status}
+      error={error}
+      onRefresh={refresh}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      selectedPower={selectedPower}
+      drawerClosing={powerDrawerClosing}
+      ask={powerAsk}
+      onAsk={setPowerAsk}
+      onSelect={selectPower}
+      onCloseDrawer={closePowerDrawer}
+    />
   );
 }

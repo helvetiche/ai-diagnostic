@@ -1,25 +1,42 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/primitives/Button";
-import { aiMemory } from "@/lib/aiMemory";
 import { useAiConversations } from "@/hooks/useAiConversations";
 import { useAiMemoryFacts } from "@/hooks/useAiMemoryFacts";
-import type { MemorySearchHit } from "@/types/aiMemory";
+import { aiMemory } from "@/lib/aiMemory";
+import type { MemorySearchHit, MemoryStats } from "@/types/aiMemory";
+
+function errorText(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
 
 export function MemoryPanel() {
-  const { conversations, loading: convLoading, remove: removeConv, refresh: refreshConv } =
-    useAiConversations();
-  const { facts, loading: factLoading, remove: removeFact, clear: clearFacts, refresh: refreshFacts } =
-    useAiMemoryFacts();
+  const {
+    conversations,
+    loading: convLoading,
+    error: convError,
+    remove: removeConv,
+    refresh: refreshConv,
+  } = useAiConversations();
+  const {
+    facts,
+    loading: factLoading,
+    error: factError,
+    remove: removeFact,
+    clear: clearFacts,
+    refresh: refreshFacts,
+  } = useAiMemoryFacts();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<MemorySearchHit[]>([]);
-  const [stats, setStats] = useState<{ conversations: number; messages: number; facts: number; indexEntries: number } | null>(
-    null,
-  );
+  const [stats, setStats] = useState<MemoryStats | null>(null);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    void aiMemory.stats().then(setStats).catch(() => setStats(null));
+    void aiMemory
+      .stats()
+      .then(setStats)
+      .catch(() => setStats(null));
   }, [conversations.length, facts.length]);
 
   async function runSearch() {
@@ -27,23 +44,55 @@ export function MemoryPanel() {
       setHits([]);
       return;
     }
+    setActionError(null);
     try {
       const result = await aiMemory.search(query.trim(), 20);
       setHits(result);
-    } catch {
+    } catch (cause) {
       setHits([]);
+      setActionError(errorText(cause));
+    }
+  }
+
+  async function deleteConversation(id: string) {
+    setActionError(null);
+    try {
+      await removeConv(id);
+    } catch (cause) {
+      setActionError(errorText(cause));
+    }
+  }
+
+  async function deleteFact(id: string) {
+    setActionError(null);
+    try {
+      await removeFact(id);
+    } catch (cause) {
+      setActionError(errorText(cause));
+    }
+  }
+
+  async function clearFactList() {
+    setActionError(null);
+    try {
+      await clearFacts();
+    } catch (cause) {
+      setActionError(errorText(cause));
     }
   }
 
   async function clearAll() {
     setBusy(true);
+    setActionError(null);
     try {
       await aiMemory.clearAll();
       await refreshConv();
       await refreshFacts();
       setHits([]);
-      const s = await aiMemory.stats();
-      setStats(s);
+      const next = await aiMemory.stats();
+      setStats(next);
+    } catch (cause) {
+      setActionError(errorText(cause));
     } finally {
       setBusy(false);
     }
@@ -57,37 +106,23 @@ export function MemoryPanel() {
         </p>
         {stats && (
           <p className="font-mono text-[10px] text-muted-foreground">
-            {stats.conversations} conv · {stats.messages} msg · {stats.facts} facts · {stats.indexEntries} idx
+            {stats.conversations} conv · {stats.messages} msg · {stats.facts} facts
           </p>
         )}
       </div>
 
+      {actionError ? (
+        <p className="font-mono text-[10px] text-critical" role="status" aria-live="polite">
+          {actionError}
+        </p>
+      ) : null}
+
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium text-foreground">Conversations</p>
-          <Button
-            variant="quiet"
-            className="h-6 px-2 font-mono text-[9px]"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const conv = await aiMemory.conversationCreate("Test conversation", "machine");
-                await aiMemory.messageAppend(conv.id, "user", "Hello memory", undefined, 2);
-                await aiMemory.messageAppend(conv.id, "assistant", "Stored locally.", "test-model", 3);
-                await refreshConv();
-                const s = await aiMemory.stats();
-                setStats(s);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Add test
-          </Button>
-        </div>
+        <p className="text-[12px] font-medium text-foreground">Conversations</p>
         {convLoading ? (
           <p className="font-mono text-[10px] text-muted-foreground">Loading…</p>
+        ) : convError ? (
+          <p className="font-mono text-[10px] text-critical">{convError}</p>
         ) : conversations.length === 0 ? (
           <p className="font-mono text-[10px] text-muted-foreground">No conversations stored.</p>
         ) : (
@@ -106,7 +141,7 @@ export function MemoryPanel() {
                 <Button
                   variant="ghost"
                   className="h-6 px-2 font-mono text-[9px]"
-                  onClick={() => void removeConv(conv.id)}
+                  onClick={() => void deleteConversation(conv.id)}
                 >
                   Delete
                 </Button>
@@ -119,44 +154,20 @@ export function MemoryPanel() {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[12px] font-medium text-foreground">Facts</p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="quiet"
-              className="h-6 px-2 font-mono text-[9px]"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await aiMemory.factUpsert({
-                    scope: "machine",
-                    key: "test.fact",
-                    value: "hello",
-                    source: "user",
-                    pinned: true,
-                  });
-                  await refreshFacts();
-                  const s = await aiMemory.stats();
-                  setStats(s);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Add sample
-            </Button>
-            {facts.length > 0 && (
+          {facts.length > 0 && (
             <Button
               variant="ghost"
               className="h-6 px-2 font-mono text-[9px]"
-              onClick={() => void clearFacts()}
+              onClick={() => void clearFactList()}
             >
               Clear facts
             </Button>
           )}
         </div>
-        </div>
         {factLoading ? (
           <p className="font-mono text-[10px] text-muted-foreground">Loading…</p>
+        ) : factError ? (
+          <p className="font-mono text-[10px] text-critical">{factError}</p>
         ) : facts.length === 0 ? (
           <p className="font-mono text-[10px] text-muted-foreground">No durable facts stored.</p>
         ) : (
@@ -178,7 +189,7 @@ export function MemoryPanel() {
                 <Button
                   variant="ghost"
                   className="h-6 px-2 font-mono text-[9px]"
-                  onClick={() => void removeFact(fact.id)}
+                  onClick={() => void deleteFact(fact.id)}
                 >
                   Delete
                 </Button>
@@ -189,23 +200,31 @@ export function MemoryPanel() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <p className="text-[12px] font-medium text-foreground">Search index</p>
+        <p className="text-[12px] font-medium text-foreground">Search memory</p>
         <div className="flex gap-2">
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search indexed diagnostics…"
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label="Search conversations and facts"
+            placeholder="Search conversations and facts…"
             className="min-w-0 flex-1 bg-surface-muted px-2 py-1.5 font-mono text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
-          <Button variant="quiet" className="h-8 px-3 font-mono text-[9px]" onClick={() => void runSearch()}>
+          <Button
+            variant="quiet"
+            className="h-8 px-3 font-mono text-[9px]"
+            onClick={() => void runSearch()}
+          >
             Search
           </Button>
         </div>
         {hits.length > 0 && (
           <ul className="flex flex-col gap-1">
             {hits.map((hit) => (
-              <li key={`${hit.entityType}:${hit.entityId}`} className="border border-border-subtle bg-surface-muted px-2 py-1.5">
+              <li
+                key={`${hit.entityType}:${hit.entityId}`}
+                className="border border-border-subtle bg-surface-muted px-2 py-1.5"
+              >
                 <p className="font-mono text-[10px] text-foreground">{hit.title}</p>
                 <p className="font-mono text-[9px] text-muted-foreground">{hit.snippet}</p>
               </li>

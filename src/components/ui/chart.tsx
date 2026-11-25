@@ -1,5 +1,5 @@
 import * as React from "react";
-import * as RechartsPrimitive from "recharts";
+
 import { cn } from "@/lib/utils";
 
 export type ChartConfig = Record<
@@ -9,6 +9,38 @@ export type ChartConfig = Record<
     color?: string;
   }
 >;
+
+function importRecharts() {
+  return import("recharts");
+}
+
+type RechartsModule = Awaited<ReturnType<typeof importRecharts>>;
+
+let rechartsPromise: Promise<RechartsModule> | undefined;
+
+function loadRecharts(): Promise<RechartsModule> {
+  rechartsPromise ??= importRecharts();
+  return rechartsPromise;
+}
+
+/** Load recharts on first chart mount instead of shipping it in the entry chunk. */
+export function useRecharts(): RechartsModule | null {
+  const [recharts, setRecharts] = React.useState<RechartsModule | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    void loadRecharts().then((module) => {
+      if (active) {
+        setRecharts(module);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return recharts;
+}
 
 type ChartContextValue = {
   config: ChartConfig;
@@ -33,10 +65,13 @@ function ChartContainer({
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig;
-  children: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer>["children"];
+  children: React.ReactNode;
 }) {
+  const value = React.useMemo(() => ({ config }), [config]);
+  const recharts = useRecharts();
+
   return (
-    <ChartContext.Provider value={{ config }}>
+    <ChartContext.Provider value={value}>
       <div
         data-slot="chart"
         className={cn(
@@ -51,13 +86,18 @@ function ChartContainer({
         )}
         {...props}
       >
-        <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
+        {recharts ? <recharts.ResponsiveContainer>{children}</recharts.ResponsiveContainer> : null}
       </div>
     </ChartContext.Provider>
   );
 }
 
-const ChartTooltip = RechartsPrimitive.Tooltip;
+type ChartTooltipProps = React.ComponentProps<RechartsModule["Tooltip"]>;
+
+function ChartTooltip(props: ChartTooltipProps) {
+  const recharts = useRecharts();
+  return recharts ? <recharts.Tooltip {...props} /> : null;
+}
 
 type ChartTooltipItem = {
   dataKey?: string | number;

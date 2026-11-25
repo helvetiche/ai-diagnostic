@@ -4,49 +4,90 @@ import type {
   AiConversation,
   AiMemoryFact,
   AiMessage,
+  MemoryBootstrap,
   MemorySearchHit,
   MemoryStats,
 } from "@/types/aiMemory";
 
+/**
+ * Emergency kill switch for the whole memory feature.
+ * Set to false to run Ask AI fully in memory again.
+ */
+export const AI_MEMORY_ENABLED = true;
+
+const MEMORY_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label} timed out`));
+    }, MEMORY_TIMEOUT_MS);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * Every memory call is bounded. A slow or locked database rejects instead of
+ * leaving the UI waiting forever, and the caller can fall back to in-memory chat.
+ */
+function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return withTimeout(invoke<T>(command, args), command);
+}
+
 export const aiMemory = {
-  conversationCreate: (title?: string, contextKey?: string) =>
-    invoke<AiConversation>("memory_conversation_create", { title, contextKey }),
-
-  conversationList: (limit?: number, offset?: number, archived?: boolean) =>
-    invoke<AiConversation[]>("memory_conversation_list", { limit, offset, archived }),
-
-  conversationGet: (id: string) =>
-    invoke<AiConversation>("memory_conversation_get", { id }),
-
-  conversationDelete: (id: string) =>
-    invoke<void>("memory_conversation_delete", { id }),
-
-  conversationArchive: (id: string, archived: boolean) =>
-    invoke<void>("memory_conversation_archive", { id, archived }),
-
-  conversationTouch: (id: string, title?: string) =>
-    invoke<void>("memory_conversation_touch", { id, title }),
-
-  messageAppend: (
-    conversationId: string,
-    role: AiMessage["role"],
-    content: string,
-    model?: string,
-    tokens?: number,
-  ) =>
-    invoke<AiMessage>("memory_message_append", {
-      conversationId,
-      role,
-      content,
-      model,
-      tokens,
+  bootstrap: (options?: {
+    contextKey?: string;
+    conversationLimit?: number;
+    messageLimit?: number;
+  }) =>
+    call<MemoryBootstrap>("memory_bootstrap", {
+      contextKey: options?.contextKey,
+      conversationLimit: options?.conversationLimit,
+      messageLimit: options?.messageLimit,
     }),
 
-  messageList: (conversationId: string, limit?: number) =>
-    invoke<AiMessage[]>("memory_message_list", { conversationId, limit }),
+  conversationCreate: (title?: string, contextKey?: string) =>
+    call<AiConversation>("memory_conversation_create", { title, contextKey }),
 
-  messageDelete: (id: string) =>
-    invoke<void>("memory_message_delete", { id }),
+  conversationList: (options?: {
+    contextKey?: string;
+    limit?: number;
+    offset?: number;
+    archived?: boolean;
+  }) =>
+    call<AiConversation[]>("memory_conversation_list", {
+      contextKey: options?.contextKey,
+      limit: options?.limit,
+      offset: options?.offset,
+      archived: options?.archived,
+    }),
+
+  conversationDelete: (id: string) =>
+    call<void>("memory_conversation_delete", { id }),
+
+  conversationRename: (id: string, title: string) =>
+    call<void>("memory_conversation_rename", { id, title }),
+
+  messages: (conversationId: string, limit?: number) =>
+    call<AiMessage[]>("memory_conversation_messages", { conversationId, limit }),
+
+  turnAppend: (input: {
+    conversationId: string;
+    userContent: string;
+    assistantContent: string;
+    model?: string;
+    title?: string;
+  }) => call<void>("memory_turn_append", input),
 
   factUpsert: (input: {
     scope?: string;
@@ -57,7 +98,7 @@ export const aiMemory = {
     expiresAt?: number;
     pinned?: boolean;
   }) =>
-    invoke<AiMemoryFact>("memory_fact_upsert", {
+    call<AiMemoryFact>("memory_fact_upsert", {
       scope: input.scope,
       key: input.key,
       value: input.value,
@@ -68,24 +109,16 @@ export const aiMemory = {
     }),
 
   factList: (scope?: string, includeExpired?: boolean) =>
-    invoke<AiMemoryFact[]>("memory_fact_list", { scope, includeExpired }),
+    call<AiMemoryFact[]>("memory_fact_list", { scope, includeExpired }),
 
-  factDelete: (id: string) =>
-    invoke<void>("memory_fact_delete", { id }),
+  factDelete: (id: string) => call<void>("memory_fact_delete", { id }),
 
-  factClear: (scope?: string) =>
-    invoke<void>("memory_fact_clear", { scope }),
-
-  searchIndexUpsert: (entityType: string, entityId: string, title: string, body: string) =>
-    invoke<void>("memory_search_index_upsert", { entityType, entityId, title, body }),
-
-  searchIndexDelete: (entityType: string, entityId: string) =>
-    invoke<void>("memory_search_index_delete", { entityType, entityId }),
+  factClear: (scope?: string) => call<void>("memory_fact_clear", { scope }),
 
   search: (query: string, limit?: number) =>
-    invoke<MemorySearchHit[]>("memory_search", { query, limit }),
+    call<MemorySearchHit[]>("memory_search", { query, limit }),
 
-  stats: () => invoke<MemoryStats>("memory_stats"),
+  stats: () => call<MemoryStats>("memory_stats"),
 
-  clearAll: () => invoke<void>("memory_clear_all"),
+  clearAll: () => call<void>("memory_clear_all"),
 };

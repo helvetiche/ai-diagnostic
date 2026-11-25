@@ -6,17 +6,28 @@ pub enum MemoryError {
     Sql(String),
 }
 
-// thiserror may not be dependency; implement Display manually instead.
 impl std::fmt::Display for MemoryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MemoryError::Io(s) => write!(f, "io error: {s}"),
-            MemoryError::Sql(s) => write!(f, "sql error: {s}"),
+            MemoryError::Io(message) => write!(f, "io error: {message}"),
+            MemoryError::Sql(message) => write!(f, "sql error: {message}"),
         }
     }
 }
 
 impl std::error::Error for MemoryError {}
+
+impl From<rusqlite::Error> for MemoryError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Sql(error.to_string())
+    }
+}
+
+impl From<std::io::Error> for MemoryError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error.to_string())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +50,14 @@ pub struct AiMessage {
     pub model: Option<String>,
     pub tokens: Option<i64>,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryBootstrap {
+    pub conversations: Vec<AiConversation>,
+    pub active_conversation_id: Option<String>,
+    pub messages: Vec<AiMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,14 +90,13 @@ pub struct MemoryStats {
     pub conversations: i64,
     pub messages: i64,
     pub facts: i64,
-    pub index_entries: i64,
 }
 
 fn now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
+        .map(|duration| duration.as_millis() as i64)
         .unwrap_or(0)
 }
 

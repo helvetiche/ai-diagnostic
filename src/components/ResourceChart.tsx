@@ -1,10 +1,10 @@
 import { useId, type ReactNode } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  useRecharts,
   type ChartConfig,
 } from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
@@ -97,6 +97,7 @@ export function ResourceChart({
   chartClassName = "h-32",
 }: ResourceChartProps) {
   const uid = useId().replace(/:/g, "");
+  const recharts = useRecharts();
 
   const config: ChartConfig = Object.fromEntries(
     series.map((item) => [item.key, { label: item.label, color: item.color }]),
@@ -165,14 +166,14 @@ export function ResourceChart({
           >
             {emptyMessage}
           </div>
-        ) : (
+        ) : recharts ? (
           <ChartContainer
             config={config}
             role="img"
             aria-label={ariaLabel}
             className={cn(chartClassName, "w-full")}
           >
-            <AreaChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
+            <recharts.AreaChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 0 }}>
               <defs>
                 {series.map((item) => (
                   <linearGradient
@@ -188,8 +189,12 @@ export function ResourceChart({
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid vertical stroke="var(--border-subtle)" strokeDasharray="3 4" />
-              <XAxis
+              <recharts.CartesianGrid
+                vertical
+                stroke="var(--border-subtle)"
+                strokeDasharray="3 4"
+              />
+              <recharts.XAxis
                 dataKey="sampledAt"
                 type="number"
                 domain={["dataMin", "dataMax"]}
@@ -198,7 +203,7 @@ export function ResourceChart({
                 axisLine={false}
                 height={4}
               />
-              <YAxis
+              <recharts.YAxis
                 domain={yDomain ?? ["auto", "auto"]}
                 tickFormatter={yTickFormatter}
                 tickLine={false}
@@ -211,7 +216,7 @@ export function ResourceChart({
                 content={<ResourceTooltip series={series} renderFooter={renderTooltipFooter} />}
               />
               {series.map((item) => (
-                <Area
+                <recharts.Area
                   key={item.key}
                   type="monotone"
                   dataKey={item.key}
@@ -222,8 +227,10 @@ export function ResourceChart({
                   isAnimationActive={false}
                 />
               ))}
-            </AreaChart>
+            </recharts.AreaChart>
           </ChartContainer>
+        ) : (
+          <div className={cn(chartClassName, "w-full")} />
         )}
       </div>
     </figure>

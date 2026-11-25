@@ -95,13 +95,14 @@ export function TopBar({
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const current = active === item.id;
-                const hasChildren = !!item.children?.length;
+                const hasChildren = Boolean(item.children?.length);
                 const isOpen = open === item.id;
 
                 if (hasChildren) {
                   return (
                     <li
                       key={item.id}
+                      role="presentation"
                       className="relative flex"
                       onMouseEnter={() => setOpen(item.id)}
                       onMouseLeave={() => setOpen(null)}
@@ -116,7 +117,7 @@ export function TopBar({
                           "text-muted-foreground hover:bg-surface-muted/60 hover:text-foreground",
                         )}
                       >
-                        <Icon size={13} weight="fill" aria-hidden={true} />
+                        <Icon size={13} weight="fill" aria-hidden />
                         <span className="max-sm:sr-only">{item.label}</span>
                       </button>
                       <div
@@ -131,25 +132,29 @@ export function TopBar({
                           {item.children?.map((child: NavChild) => {
                             const ChildIcon = child.icon;
                             return (
-                            <li key={child.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (child.section) {
-                                    setPendingLogSection(child.section);
-                                  }
-                                  onSelect(child.id);
-                                  setOpen(null);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center gap-2 px-4 py-2 text-left font-mono text-[11px] transition-colors duration-[120ms] ease-soft hover:bg-surface-muted",
-                                  active === child.id ? "text-foreground" : "text-muted-foreground",
-                                )}
-                              >
-                                {ChildIcon ? <ChildIcon size={13} weight="fill" aria-hidden={true} /> : null}
-                                {child.label}
-                              </button>
-                            </li>
+                              <li key={child.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (child.section) {
+                                      setPendingLogSection(child.section);
+                                    }
+                                    onSelect(child.id);
+                                    setOpen(null);
+                                  }}
+                                  className={cn(
+                                    "flex w-full items-center gap-2 px-4 py-2 text-left font-mono text-[11px] transition-colors duration-[120ms] ease-soft hover:bg-surface-muted",
+                                    active === child.id
+                                      ? "text-foreground"
+                                      : "text-muted-foreground",
+                                  )}
+                                >
+                                  {ChildIcon ? (
+                                    <ChildIcon size={13} weight="fill" aria-hidden />
+                                  ) : null}
+                                  {child.label}
+                                </button>
+                              </li>
                             );
                           })}
                         </ul>
@@ -172,7 +177,7 @@ export function TopBar({
                           : "text-muted-foreground hover:bg-surface-muted/60 hover:text-foreground",
                       )}
                     >
-                      <Icon size={13} weight="fill" aria-hidden={true} />
+                      <Icon size={13} weight="fill" aria-hidden />
                       <span className="max-sm:sr-only">{item.label}</span>
                     </button>
                   </li>

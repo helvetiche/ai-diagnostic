@@ -14,6 +14,12 @@ export default defineConfig(() => ({
     },
   },
 
+  build: {
+    // Charting is lazily loaded; its isolated vendor chunk is expected to be larger
+    // than Vite's default 500 kB warning threshold.
+    chunkSizeWarningLimit: 600,
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

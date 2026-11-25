@@ -69,7 +69,10 @@ export function loadConfig(): OpenRouterConfig {
     const models = Array.isArray(parsed.models)
       ? parsed.models.map(parseModel).filter((model): model is OpenRouterModel => model !== null)
       : DEFAULT_MODELS;
-    const model = typeof parsed.model === "string" && parsed.model.length > 0 ? parsed.model : DEFAULT_CONFIG.model;
+    const model =
+      typeof parsed.model === "string" && parsed.model.length > 0
+        ? parsed.model
+        : DEFAULT_CONFIG.model;
 
     return {
       apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
@@ -137,14 +140,14 @@ export async function fetchOpenRouterModels(config: OpenRouterConfig): Promise<O
   }
 
   const payload = (await response.json()) as {
-    data?: Array<{
+    data?: {
       id?: unknown;
       name?: unknown;
       pricing?: { prompt?: unknown; completion?: unknown };
-    }>;
+    }[];
   };
   if (!Array.isArray(payload.data)) {
-    throw new Error("Unexpected response from OpenRouter");
+    throw new TypeError("Unexpected response from OpenRouter");
   }
 
   return payload.data

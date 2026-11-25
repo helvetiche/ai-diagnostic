@@ -14,8 +14,8 @@ export function useAiMemoryFacts(scope?: string) {
       const list = await aiMemory.factList(scope, false);
       setFacts(list);
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoading(false);
     }
@@ -25,26 +25,9 @@ export function useAiMemoryFacts(scope?: string) {
     void refresh();
   }, [refresh]);
 
-  const upsert = useCallback(
-    async (input: Parameters<typeof aiMemory.factUpsert>[0]) => {
-      const fact = await aiMemory.factUpsert(input);
-      setFacts((prev) => {
-        const idx = prev.findIndex((f) => f.id === fact.id || (f.scope === fact.scope && f.key === fact.key));
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = fact;
-          return next;
-        }
-        return [fact, ...prev];
-      });
-      return fact;
-    },
-    [],
-  );
-
   const remove = useCallback(async (id: string) => {
     await aiMemory.factDelete(id);
-    setFacts((prev) => prev.filter((f) => f.id !== id));
+    setFacts((prev) => prev.filter((fact) => fact.id !== id));
   }, []);
 
   const clear = useCallback(async () => {
@@ -52,5 +35,5 @@ export function useAiMemoryFacts(scope?: string) {
     setFacts([]);
   }, [scope]);
 
-  return { facts, loading, error, refresh, upsert, remove, clear };
+  return { facts, loading, error, refresh, remove, clear };
 }
